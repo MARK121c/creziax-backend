@@ -5,6 +5,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const prisma = require('./prismaClient');
 
 // Coolify injects env vars directly - no dotenv needed in production
 if (process.env.NODE_ENV !== 'production') {
