@@ -46,6 +46,11 @@ const io = new Server(server, {
 });
 
 // Middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'No Origin'}`);
+  next();
+});
+
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -58,6 +63,26 @@ if (!fs.existsSync(storagePath)) {
 app.use('/storage', express.static(storagePath));
 
 // Health check
+app.get('/api/health', async (req, res) => {
+  try {
+    // Test database connection
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ 
+      status: 'ok', 
+      database: 'connected',
+      timestamp: new Date().toISOString(),
+      node_env: process.env.NODE_ENV
+    });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      database: 'disconnected', 
+      error: error.message 
+    });
+  }
+});
+
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to Creziax Portal API' });
 });
