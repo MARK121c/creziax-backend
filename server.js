@@ -1,13 +1,15 @@
-// Creziax Portal Backend - v1.1.0 (PathError fixed, wildcard route removed)
+// Creziax Portal Backend - v1.2.0 (dotenv removed, using Coolify env vars)
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
 
-dotenv.config();
+// Coolify injects env vars directly - no dotenv needed in production
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 
 const app = express();
 const server = http.createServer(app);
