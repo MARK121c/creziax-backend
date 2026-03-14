@@ -49,6 +49,7 @@ model Client {
   company   String?
   phone     String?
   tier      Tier     @default(REGULAR)
+  isVip     Boolean  @default(false)
   
   projects  Project[]
   invoices  Invoice[]

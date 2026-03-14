@@ -20,6 +20,7 @@ const allowedOrigins = [
   'https://portal.creziax.cloud',
   'http://portal.creziax.cloud',
   'http://localhost:5173',
+  'http://localhost:5174',
   'http://localhost:5000',
   'http://72.62.35.136:5173',
   'http://72.62.35.136:5000',

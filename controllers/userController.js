@@ -7,14 +7,10 @@ const bcrypt = require('bcryptjs');
 const getUsers = async (req, res, next) => {
   try {
     const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        createdAt: true,
-      },
+      include: {
+        clientInfo: true,
+        teamMemberInfo: true
+      }
     });
     res.json(users);
   } catch (error) {
@@ -54,7 +50,13 @@ const createUser = async (req, res, next) => {
     // If role is CLIENT, create client record
     if (role === 'CLIENT') {
       await prisma.client.create({
-        data: { userId: user.id, company, phone },
+        data: { 
+          userId: user.id, 
+          company, 
+          phone,
+          isVip: req.body.isVip || false,
+          tier: req.body.tier || 'REGULAR'
+        },
       });
     }
 

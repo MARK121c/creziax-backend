@@ -7,6 +7,13 @@ if (!supabaseKey) {
   console.warn('⚠️ SUPABASE_ANON_KEY is missing. File uploads to Supabase will fail.');
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+let supabase;
+
+if (supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+} else {
+  console.error('❌ Supabase initialization skipped: Missing SUPABASE_ANON_KEY');
+  supabase = null; // Or a mock object if needed
+}
 
 module.exports = supabase;

@@ -44,11 +44,11 @@ const createClient = async (req, res, next) => {
 // Update client
 const updateClient = async (req, res, next) => {
   const { id } = req.params;
-  const { company, phone, tier } = req.body;
+  const { company, phone, tier, isVip } = req.body;
   try {
     const client = await prisma.client.update({ 
       where: { id }, 
-      data: { company, phone, tier } 
+      data: { company, phone, tier, isVip } 
     });
     res.json(client);
   } catch (err) {
