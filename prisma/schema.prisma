@@ -14,6 +14,15 @@ enum Role {
   CLIENT
 }
 
+enum Tier {
+  REGULAR
+  VIP_1X
+  VIP_2X
+  VIP_3X
+  VIP_4X
+  VIP_5X
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -39,6 +48,7 @@ model Client {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   company   String?
   phone     String?
+  tier      Tier     @default(REGULAR)
   
   projects  Project[]
   invoices  Invoice[]

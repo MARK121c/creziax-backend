@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const path = require('path');
 const fs = require('fs');
+const supabase = require('../supabaseClient');
 
 // @desc    Get files for a project
 // @route   GET /api/files?projectId=xxx
@@ -31,11 +32,41 @@ const uploadFile = async (req, res, next) => {
       return res.status(400).json({ message: 'projectId is required' });
     }
 
+    let fileUrl = `/storage/${req.file.filename}`;
+
+    // Try Supabase Storage if configured
+    if (process.env.SUPABASE_ANON_KEY) {
+      try {
+        const fileContent = fs.readFileSync(req.file.path);
+        const { data, error } = await supabase.storage
+          .from('creziax-assets')
+          .upload(`uploads/${Date.now()}-${req.file.originalname}`, fileContent, {
+            contentType: req.file.mimetype,
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) {
+          console.error("Supabase Storage Error:", error.message);
+        } else {
+          const { data: { publicUrl } } = supabase.storage
+            .from('creziax-assets')
+            .getPublicUrl(data.path);
+          fileUrl = publicUrl;
+          
+          // Delete local file after successful upload to Supabase
+          fs.unlinkSync(req.file.path);
+        }
+      } catch (supaErr) {
+        console.error("Supabase Upload Failed, falling back to local:", supaErr.message);
+      }
+    }
+
     const file = await prisma.file.create({
       data: {
         name: req.file.filename,
         originalName: req.file.originalname,
-        url: `/storage/${req.file.filename}`,
+        url: fileUrl,
         fileType: fileType || 'DOCUMENT',
         size: req.file.size,
         projectId,
