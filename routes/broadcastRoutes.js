@@ -1,6 +1,8 @@
 const express = require('express');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/auth');
 const { getActiveBroadcasts, createBroadcast, updateBroadcast, deleteBroadcast } = require('../controllers/broadcastController');
+
+const admin = authorize('ADMIN');
 
 const router = express.Router();
 
