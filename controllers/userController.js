@@ -23,7 +23,7 @@ const getUsers = async (req, res, next) => {
 // @access  Private/Admin
 const createUser = async (req, res, next) => {
   try {
-    const { firstName, lastName, email, password, role, company, phone, position } = req.body;
+    const { firstName, lastName, email, password, role, company, phone, position, avatarUrl } = req.body;
 
     if (!firstName || !lastName || !email || !password || !role) {
       return res.status(400).json({ message: 'Please provide all required fields' });
@@ -44,6 +44,7 @@ const createUser = async (req, res, next) => {
         email,
         password: hashedPassword,
         role,
+        avatarUrl,
       },
     });
 
@@ -55,7 +56,8 @@ const createUser = async (req, res, next) => {
           company, 
           phone,
           isVip: req.body.isVip || false,
-          tier: req.body.tier || 'REGULAR'
+          tier: req.body.tier || 'REGULAR',
+          logoUrl: req.body.logoUrl
         },
       });
     }

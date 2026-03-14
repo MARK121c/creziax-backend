@@ -25,14 +25,15 @@ const getClient = async (req, res, next) => {
 
 // Create a new client (requires a linked user)
 const createClient = async (req, res, next) => {
-  const { userId, company, phone, tier } = req.body;
+  const { userId, company, phone, tier, logoUrl } = req.body;
   try {
     const client = await prisma.client.create({ 
       data: { 
         user: { connect: { id: userId } }, 
         company, 
         phone,
-        tier: tier || 'REGULAR'
+        tier: tier || 'REGULAR',
+        logoUrl
       } 
     });
     res.status(201).json(client);
@@ -44,11 +45,11 @@ const createClient = async (req, res, next) => {
 // Update client
 const updateClient = async (req, res, next) => {
   const { id } = req.params;
-  const { company, phone, tier, isVip } = req.body;
+  const { company, phone, tier, isVip, logoUrl } = req.body;
   try {
     const client = await prisma.client.update({ 
       where: { id }, 
-      data: { company, phone, tier, isVip } 
+      data: { company, phone, tier, isVip, logoUrl } 
     });
     res.json(client);
   } catch (err) {
