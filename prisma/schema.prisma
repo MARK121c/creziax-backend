@@ -29,6 +29,7 @@ model User {
   messagesSent     Message[] @relation("MessageSender")
   messagesReceived Message[] @relation("MessageReceiver")
   uploadedFiles    File[]    @relation("FileUploader")
+  broadcasts       Broadcast[] @relation("BroadcastAuthor")
 }
 
 model Client {
@@ -189,4 +190,16 @@ model Payment {
 
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+model Broadcast {
+  id        String   @id @default(uuid())
+  message   String
+  isActive  Boolean  @default(true)
+  
+  authorId  String
+  author    User     @relation("BroadcastAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

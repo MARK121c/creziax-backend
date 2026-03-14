@@ -98,6 +98,7 @@ const fileRoutes = require('./routes/fileRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const broadcastRoutes = require('./routes/broadcastRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -108,6 +109,7 @@ app.use('/api/files', fileRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/broadcasts', broadcastRoutes);
 
 // Socket.io events
 io.on('connection', (socket) => {
