@@ -1,19 +1,28 @@
 const { createClient } = require('@supabase/supabase-js');
 
 const supabaseUrl = process.env.SUPABASE_URL || 'https://kgrlfdomrclfivhhmnoy.supabase.co';
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseKey) {
-  console.warn('⚠️ SUPABASE_ANON_KEY is missing. File uploads to Supabase will fail.');
+if (!supabaseAnonKey) {
+  console.warn('⚠️ SUPABASE_ANON_KEY is missing.');
 }
 
-let supabase;
+// Regular anon client for auth operations
+const supabase = supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
-if (supabaseKey) {
-  supabase = createClient(supabaseUrl, supabaseKey);
-} else {
-  console.error('❌ Supabase initialization skipped: Missing SUPABASE_ANON_KEY');
-  supabase = null; // Or a mock object if needed
+// Service role client for storage uploads (bypasses RLS)
+const supabaseAdmin = supabaseServiceKey
+  ? createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+  : supabase; // fallback to anon if no service key
+
+if (!supabaseServiceKey) {
+  console.warn('⚠️ SUPABASE_SERVICE_ROLE_KEY is missing. Storage uploads may fail due to RLS policies.');
 }
 
 module.exports = supabase;
+module.exports.supabaseAdmin = supabaseAdmin;
