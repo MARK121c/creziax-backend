@@ -1,7 +1,7 @@
 const prisma = require('../prismaClient');
 const path = require('path');
 const fs = require('fs');
-const supabase = require('../supabaseClient');
+const { supabase } = require('../supabaseClient');
 
 // @desc    Get files for a project
 // @route   GET /api/files?projectId=xxx
