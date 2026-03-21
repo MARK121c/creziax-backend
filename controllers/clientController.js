@@ -33,7 +33,7 @@ const getClients = async (req, res, next) => {
 const getClient = async (req, res, next) => {
   const { id } = req.params;
   try {
-    const client = await prisma.client.findUnique({ 
+    let client = await prisma.client.findUnique({ 
       where: { id }, 
       include: { 
         user: true, 
@@ -44,6 +44,21 @@ const getClient = async (req, res, next) => {
         } 
       } 
     });
+
+    if (!client) {
+      client = await prisma.client.findUnique({ 
+        where: { userId: id }, 
+        include: { 
+          user: true, 
+          projects: true, 
+          invoices: {
+            where: { status: 'PAID' },
+            select: { amount: true }
+          } 
+        } 
+      });
+    }
+
     if (!client) return res.status(404).json({ message: 'Client not found' });
     
     // Role Enforcement: CLIENT can only see their own client record
