@@ -1,0 +1,480 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  TEAM
+  CLIENT
+}
+
+enum Tier {
+  REGULAR
+  VIP_1X
+  VIP_2X
+  VIP_3X
+  VIP_4X
+  VIP_5X
+}
+
+enum HealthScore {
+  GOOD
+  MONITOR
+  AT_RISK
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(CLIENT)
+  firstName String
+  lastName  String
+  avatarUrl String?
+  permissions String[] @default([])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clientInfo     Client?
+  teamMemberInfo TeamMember?
+  
+  messagesSent     Message[] @relation("MessageSender")
+  messagesReceived Message[] @relation("MessageReceiver")
+  uploadedFiles    File[]    @relation("FileUploader")
+  broadcasts       Broadcast[] @relation("BroadcastAuthor")
+  organizedMeetings Meeting[] @relation("MeetingOrganizer")
+  assignedTickets  Ticket[] @relation("AssignedTickets")
+  notifications    Notification[]
+  bonuses          Bonus[]
+  activityLogs     ActivityLog[]
+  expenses         Expense[] @relation("UserExpenses")
+  
+  teamGroups       TeamGroup[] @relation("TeamGroupMembers")
+  managedContracts Contract[] @relation("ContractMember")
+}
+
+model TeamGroup {
+  id        String   @id @default(uuid())
+  name      String
+  members   User[]   @relation("TeamGroupMembers")
+  createdAt DateTime @default(now())
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   String?
+  phone     String?
+  tier      Tier     @default(REGULAR)
+  isVip     Boolean  @default(false)
+  logoUrl   String?
+  notionLink String?
+  telegram   String?
+  managedChannels Int @default(0)
+  
+  contractStartDate DateTime?
+  contractEndDate   DateTime?
+  healthScore       HealthScore @default(GOOD)
+  internalNotes    String?
+  preferredCurrency String      @default("USD")
+  
+  projects  Project[]
+  invoices  Invoice[]
+  tickets   Ticket[]
+  meetings  Meeting[]
+  contracts Contract[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  position  String?
+  monthlySalary Float @default(0)
+  
+  // Unified fields
+  company         String?
+  phone           String?
+  notionLink      String?
+  telegram        String?
+  managedChannels Int @default(0)
+  healthScore     HealthScore @default(GOOD)
+  internalNotes   String?
+  
+  tasks     Task[]
+  projects  Project[] @relation("ProjectTeam")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ProjectStatus {
+  CHANNEL_SETUP
+  EDITING
+  THUMBNAIL
+  SCRIPT
+  PUBLISHING
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(CHANNEL_SETUP)
+  
+  clientId    String
+  client      Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // New Workspace Fields
+  annualContractDate DateTime?
+  notionUrl         String?
+  driveUrl          String?
+  brandUrl          String?
+  brandColors       String?  // Comma-separated hex codes
+  brandFonts        String?  // Font names or links
+  
+  logoUrl           String?
+  clientChannelLink String?
+  
+  teamMembers       TeamMember[] @relation("ProjectTeam")
+  phases            Phase[]
+  
+  tasks       Task[]
+  files       File[]
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+enum TaskStatus {
+  IDEA
+  SCRIPTING
+  SHOOTING
+  EDITING
+  REVIEW
+  DELIVERED
+}
+
+model Task {
+  id            String      @id @default(uuid())
+  title         String
+  description   String?
+  status        TaskStatus  @default(IDEA)
+  deadline      DateTime?
+  
+  // Video specific fields
+  reviewUrl    String?
+  privateNotes String? // Admin/Team only notes
+  
+  projectId     String
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  phaseId       String?
+  phase         Phase?      @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  
+  assignedToId  String?
+  assignedTo    TeamMember? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  cost          Float       @default(0)
+}
+
+model Phase {
+  id          String   @id @default(uuid())
+  name        String   // e.g. "March 2024"
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  tasks       Task[]
+  
+  invoice     Invoice? 
+  
+  startDate   DateTime?
+  endDate     DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum FileType {
+  VIDEO
+  THUMBNAIL
+  SCRIPT
+  DOCUMENT
+}
+
+model File {
+  id           String   @id @default(uuid())
+  name         String
+  originalName String
+  url          String
+  fileType     FileType @default(DOCUMENT)
+  size         Int
+  
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  uploadedById String
+  uploadedBy   User     @relation("FileUploader", fields: [uploadedById], references: [id], onDelete: SetDefault)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  content     String
+  
+  senderId    String
+  sender      User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  
+  receiverId  String?  // Can be null if sending to general agency thread
+  receiver    User?    @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: SetNull)
+
+  // Used to separate message chats / threads for each client context
+  threadId    String?
+
+  ticketId    String?
+  ticket      Ticket?  @relation("TicketMessages", fields: [ticketId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  service       String
+  amount        Float
+  currency      String        @default("USD")
+  exchangeRate  Float         @default(1)
+  status        InvoiceStatus @default(PENDING)
+  dueDate       DateTime?
+  
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  paymentMethod  String?  // "PayPal", "Vodafone Cash", "Bank Transfer", etc.
+  paymentDetails String?  // Free-text: actual account/number to show in PDF footer
+
+  phaseId       String?       @unique
+  phase         Phase?        @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  
+  payments      Payment[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum PaymentMethod {
+  MANUAL
+  STRIPE
+  PAYPAL
+}
+
+enum PaymentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  amount        Float
+  paymentDate   DateTime      @default(now())
+  method        PaymentMethod @default(MANUAL)
+  transactionId String?
+  status        PaymentStatus @default(PENDING)
+  
+  invoiceId     String
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Broadcast {
+  id        String   @id @default(uuid())
+  message   String
+  isActive  Boolean  @default(true)
+  
+  authorId  String
+  author    User     @relation("BroadcastAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Ticket {
+  id          String        @id @default(uuid())
+  ticketNumber Int          @default(autoincrement())
+  title       String
+  description String?
+  status      TicketStatus  @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  
+  clientId    String
+  client      Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  assignedStaffId String?
+  assignedStaff   User?     @relation("AssignedTickets", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+
+  messages    Message[]     @relation("TicketMessages")
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model ArchivedLog {
+  id          String   @id @default(uuid())
+  originalId  String
+  model       String   // e.g., "Notification", "Log", "Message"
+  data        Json
+  archivedAt  DateTime @default(now())
+  originalCreatedAt DateTime
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  content     String
+  type        String?  // e.g., "INFO", "SUCCESS", "WARNING", "ERROR"
+  isRead      Boolean  @default(false)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+model Meeting {
+  id          String        @id @default(uuid())
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  status      MeetingStatus @default(SCHEDULED)
+  meetingLink String?
+  
+  clientId    String
+  client      Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  organizerId String
+  organizer   User          @relation("MeetingOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Expense {
+  id             String   @id @default(uuid())
+  amount         Float
+  category       String   // e.g., "SERVER", "ADS", "SOFTWARE", "OTHER" (Or Team Due category)
+  description    String?
+  transferMethod String?  // e.g., "Vodafone Cash", "InstaPay", "Bank Transfer"
+  transferDetails String? // Free-text: actual account/number to show in Due PDF
+  status         String   @default("PENDING") // "PENDING" or "SENT"
+  
+  userId         String?
+  user           User?    @relation("UserExpenses", fields: [userId], references: [id], onDelete: SetNull)
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Bonus {
+  id          String   @id @default(uuid())
+  amount      Float
+  reason      String?
+  date        DateTime @default(now())
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum ActionType {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  OTHER
+}
+
+model ActivityLog {
+  id          String     @id @default(uuid())
+  action      ActionType @default(OTHER)
+  entityType  String     // e.g., "INVOICE", "PROJECT", "USER", "BONUS"
+  entityId    String?
+  details     String?    // Stored as JSON string
+  
+  userId      String?    // User who performed the action
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  createdAt   DateTime   @default(now())
+}
+
+enum ContractStatus {
+  DRAFT
+  SENT
+  SIGNED
+}
+
+model Contract {
+  id              String         @id @default(uuid())
+  title           String?
+  date            String?        // Archive Date
+  startDate       String?        // Contract Start Date
+  endDate         String?        // Contract End Date
+  pdfUrl          String?
+  clientId        String?
+  client          Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  memberId        String?
+  member          User?          @relation("ContractMember", fields: [memberId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
