@@ -1,4 +1,4 @@
-// Creziax Portal Backend - v1.3.5-FIX-PDF (HEARTBEAT: 01:58 AM)
+// Creziax Portal Backend - v9.0-ABSOLUTE-PRIVACY (GROUP/DM Strict Routing)
 // Environment variables MUST be loaded before any other imports that depend on them
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
@@ -224,27 +224,51 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_message', (data) => {
-    // 1. Broadcast to the active chat thread room
-    io.to(data.threadId).emit('receive_message', data);
+    // ╔══ ABSOLUTE PRIVACY v9.0 - STRICT ROUTING ══╗
+    // threadId = GROUP message → goes ONLY to the room, NEVER to a user room.
+    // receiverId only = DM → goes to receiver's user room.
+    // This prevents ANY group message from leaking into a DM.
+    // ╚════════════════════════════════════════════╝
 
-    // 2. Smart Routing (Global Pulse)
     const notificationPayload = {
       type: 'message',
-      threadId: data.threadId,
+      threadId: data.threadId || null,
       senderId: data.senderId,
+      senderName: data.senderName || null,
       message: 'رسالة جديدة'
     };
 
-    // A. Notify Admins Globally
-    socket.to('admins').emit('smart_notification', notificationPayload);
+    if (data.threadId) {
+      // --- GROUP MESSAGE PATH ---
+      // 1. Deliver to the thread room (all members who joined it get the full message)
+      io.to(data.threadId).emit('receive_message', data);
 
-    // B. Notify the exact receiver (if it is a DM)
-    if (data.receiverId && data.receiverId !== data.senderId) {
-      socket.to(`user_${data.receiverId}`).emit('smart_notification', notificationPayload);
+      // 2. Notify ADMINS globally so they see the badge (without the message content appearing in DM)
+      socket.to('admins').emit('smart_notification', notificationPayload);
+
+      // 3. Notify thread members (non-admin) who may NOT be in the room right now
+      //    We do this by sending to each member's user room IF the group has memberIds
+      if (Array.isArray(data.memberIds)) {
+        data.memberIds.forEach(memberId => {
+          if (memberId !== data.senderId) {
+            socket.to(`user_${memberId}`).emit('smart_notification', notificationPayload);
+          }
+        });
+      }
+    } else {
+      // --- PRIVATE DM PATH ---
+      // 1. Only deliver receive_message to the sender and the exact receiver's user rooms
+      if (data.receiverId && data.receiverId !== data.senderId) {
+        io.to(`user_${data.receiverId}`).emit('receive_message', data);
+        io.to(`user_${data.senderId}`).emit('receive_message', data);
+
+        // 2. Notify the receiver personally (for badge/sound)
+        socket.to(`user_${data.receiverId}`).emit('smart_notification', notificationPayload);
+
+        // 3. Notify admins (so they see the badge too)
+        socket.to('admins').emit('smart_notification', notificationPayload);
+      }
     }
-    
-    // C. Notify team members of a project (Group) - fallback if needed, but receiverId handles DMs.
-    // If project thread, we can rely on admins receiving it, but for a true 100% solution we can also broadcast it to `user_X` via DB in production.
   });
 
   socket.on('disconnect', () => {
