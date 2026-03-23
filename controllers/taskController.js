@@ -68,7 +68,7 @@ const updateTask = async (req, res, next) => {
   try {
     const task = await prisma.task.update({ where: { id }, data: { title, description, deadline, status, assignedToId } });
     const io = req.app.get('io');
-    if (io) io.emit('task_updated', task);
+    if (io) io.emit('task_updated', { ...task, userId: req.user.id });
     res.json(task);
   } catch (err) {
     next(err);

@@ -193,7 +193,7 @@ exports.updateWorkspaceTask = async (req, res) => {
     });
 
     const io = req.app.get('io');
-    if (io) io.emit('task_updated', task);
+    if (io) io.emit('task_updated', { ...task, userId: req.user.id });
 
     res.json({
       success: true,
@@ -288,7 +288,7 @@ exports.createWorkspaceTask = async (req, res) => {
     });
 
     const io = req.app.get('io');
-    if (io) io.emit('workspace_updated');
+    if (io) io.emit('workspace_updated', { userId: req.user.id });
 
     res.status(201).json({
       success: true,
@@ -324,7 +324,7 @@ exports.deleteWorkspaceTask = async (req, res) => {
       where: { id: req.params.id }
     });
     const io = req.app.get('io');
-    if (io) io.emit('workspace_updated');
+    if (io) io.emit('workspace_updated', { userId: req.user.id });
     
     res.json({ success: true, message: 'Task deleted' });
   } catch (error) {
