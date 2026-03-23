@@ -54,6 +54,8 @@ const io = new Server(server, {
   },
 });
 
+app.set('io', io);
+
 // Middleware
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'No Origin'}`);
@@ -206,13 +208,43 @@ cron.schedule('0 9 * * *', () => {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
+  socket.on('authenticate', (data) => {
+    if (data && data.userId) {
+      socket.join(`user_${data.userId}`);
+      if (data.role === 'ADMIN' || data.role === 'OWNER') {
+        socket.join('admins');
+      }
+      console.log(`User ${data.userId} authenticated for Smart Routing on socket ${socket.id}`);
+    }
+  });
+
   socket.on('join_thread', (threadId) => {
     socket.join(threadId);
     console.log(`User ${socket.id} joined thread ${threadId}`);
   });
 
   socket.on('send_message', (data) => {
+    // 1. Broadcast to the active chat thread room
     io.to(data.threadId).emit('receive_message', data);
+
+    // 2. Smart Routing (Global Pulse)
+    const notificationPayload = {
+      type: 'message',
+      threadId: data.threadId,
+      senderId: data.senderId,
+      message: 'رسالة جديدة'
+    };
+
+    // A. Notify Admins Globally
+    socket.to('admins').emit('smart_notification', notificationPayload);
+
+    // B. Notify the exact receiver (if it is a DM)
+    if (data.receiverId && data.receiverId !== data.senderId) {
+      socket.to(`user_${data.receiverId}`).emit('smart_notification', notificationPayload);
+    }
+    
+    // C. Notify team members of a project (Group) - fallback if needed, but receiverId handles DMs.
+    // If project thread, we can rely on admins receiving it, but for a true 100% solution we can also broadcast it to `user_X` via DB in production.
   });
 
   socket.on('disconnect', () => {

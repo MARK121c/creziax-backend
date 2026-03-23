@@ -69,6 +69,9 @@ const createTicket = async (req, res, next) => {
       }
     });
 
+    const io = req.app.get('io');
+    if (io) io.emit('new_ticket', ticket);
+
     res.status(201).json(ticket);
   } catch (err) {
     next(err);

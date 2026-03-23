@@ -192,6 +192,9 @@ exports.updateWorkspaceTask = async (req, res) => {
       }
     });
 
+    const io = req.app.get('io');
+    if (io) io.emit('task_updated', task);
+
     res.json({
       success: true,
       data: task
@@ -284,6 +287,9 @@ exports.createWorkspaceTask = async (req, res) => {
       }
     });
 
+    const io = req.app.get('io');
+    if (io) io.emit('workspace_updated');
+
     res.status(201).json({
       success: true,
       data: task
@@ -317,6 +323,9 @@ exports.deleteWorkspaceTask = async (req, res) => {
     await prisma.task.delete({
       where: { id: req.params.id }
     });
+    const io = req.app.get('io');
+    if (io) io.emit('workspace_updated');
+    
     res.json({ success: true, message: 'Task deleted' });
   } catch (error) {
     console.error(error);
