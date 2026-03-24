@@ -222,15 +222,25 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('send_message', (data) => {
-    // ╔══ STANDARD SOCKET ARCHITECTURE v10.0 - BULLETPROOF ROUTING ══╗
-    
-    // Strict Payload Validation
-    if (!data.type || !['GROUP', 'PRIVATE'].includes(data.type)) {
-      console.warn(`[SOCKET] Rejected message from ${data.senderId}: Invalid type.`);
-      return; 
+  socket.on('send_message', async (data) => {
+    if (!data.type || !['GROUP', 'PRIVATE'].includes(data.type)) return;
+
+    // 1. تحديد الهدف (Target Room)
+    const targetRoom = data.type === 'GROUP' 
+      ? `project_${data.threadId}` 
+      : `user_${data.receiverId}`;
+
+    // 2. الإرسال للهدف فقط (No Leakage)
+    if (targetRoom !== 'project_null' && targetRoom !== 'user_null') {
+      io.to(targetRoom).emit('receive_message', data);
     }
 
+    // 3. لو هي Private، نبعت نسخة للمرسل عشان الـ Sync
+    if (data.type === 'PRIVATE' && data.senderId !== data.receiverId) {
+      io.to(`user_${data.senderId}`).emit('receive_message', data);
+    }
+
+    // --- Smart Notifications (For Badges) ---
     const notificationPayload = {
       type: 'message',
       threadId: data.type === 'GROUP' ? data.threadId : null,
@@ -239,34 +249,13 @@ io.on('connection', (socket) => {
       message: 'رسالة جديدة'
     };
 
-    if (data.type === 'GROUP') {
-      // --- GROUP MESSAGE PATH ---
-      if (data.threadId) {
-        // Send ONLY to the explicit project room
-        io.to(`project_${data.threadId}`).emit('receive_message', data);
-        
-        // Notify ADMINS globally
-        socket.to('admins').emit('smart_notification', notificationPayload);
-
-        // Notify thread members (non-admin) via their isolated user rooms for background badges
-        if (Array.isArray(data.memberIds)) {
-          data.memberIds.forEach(memberId => {
-            if (memberId !== data.senderId) {
-              socket.to(`user_${memberId}`).emit('smart_notification', notificationPayload);
-            }
-          });
-        }
-      }
+    socket.to('admins').emit('smart_notification', notificationPayload);
+    if (data.type === 'GROUP' && Array.isArray(data.memberIds)) {
+      data.memberIds.forEach(memberId => {
+        if (memberId !== data.senderId) socket.to(`user_${memberId}`).emit('smart_notification', notificationPayload);
+      });
     } else if (data.type === 'PRIVATE') {
-      // --- PRIVATE DM PATH ---
-      if (data.receiverId && data.receiverId !== data.senderId) {
-        // Send ONLY to the specific user rooms
-        io.to(`user_${data.receiverId}`).emit('receive_message', data);
-        io.to(`user_${data.senderId}`).emit('receive_message', data); // For sender sync
-
-        socket.to(`user_${data.receiverId}`).emit('smart_notification', notificationPayload);
-        socket.to('admins').emit('smart_notification', notificationPayload);
-      }
+      socket.to(`user_${data.receiverId}`).emit('smart_notification', notificationPayload);
     }
   });
 
