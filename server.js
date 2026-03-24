@@ -259,6 +259,13 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('force_delete_chat', (data) => {
+    if (!data.threadId) return;
+    const targetRoom = data.type === 'GROUP' ? `project_${data.threadId}` : `user_${data.threadId}`;
+    io.to(targetRoom).emit('chat_deleted', { threadId: data.threadId });
+    console.log(`Global Wipe: Chat ${data.threadId} broadcasted to ${targetRoom}`);
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
   });
