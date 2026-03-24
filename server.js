@@ -208,19 +208,18 @@ cron.schedule('0 9 * * *', () => {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  socket.on('authenticate', (data) => {
+  socket.on('join_rooms', (data) => {
     if (data && data.userId) {
       socket.join(`user_${data.userId}`);
       if (data.role === 'ADMIN' || data.role === 'OWNER') {
         socket.join('admins');
       }
-      console.log(`User ${data.userId} authenticated for Smart Routing on socket ${socket.id}`);
+      
+      if (Array.isArray(data.projectIds)) {
+        data.projectIds.forEach(id => socket.join(`project_${id}`));
+      }
+      console.log(`User ${data.userId} joined isolated rooms: user_${data.userId} + ${data.projectIds?.length || 0} projects`);
     }
-  });
-
-  socket.on('join_thread', (threadId) => {
-    socket.join(threadId);
-    console.log(`User ${socket.id} joined thread ${threadId}`);
   });
 
   socket.on('send_message', (data) => {
@@ -228,7 +227,7 @@ io.on('connection', (socket) => {
     
     // Strict Payload Validation
     if (!data.type || !['GROUP', 'PRIVATE'].includes(data.type)) {
-      console.warn(`[SOCKET] Rejected message from ${data.senderId}: Invalid or missing type.`);
+      console.warn(`[SOCKET] Rejected message from ${data.senderId}: Invalid type.`);
       return; 
     }
 
@@ -242,14 +241,14 @@ io.on('connection', (socket) => {
 
     if (data.type === 'GROUP') {
       // --- GROUP MESSAGE PATH ---
-      // Force receiverId to null (ignored) and route via threadId room
       if (data.threadId) {
-        io.to(data.threadId).emit('receive_message', data);
+        // Send ONLY to the explicit project room
+        io.to(`project_${data.threadId}`).emit('receive_message', data);
         
         // Notify ADMINS globally
         socket.to('admins').emit('smart_notification', notificationPayload);
 
-        // Notify thread members (non-admin) via their isolated user rooms
+        // Notify thread members (non-admin) via their isolated user rooms for background badges
         if (Array.isArray(data.memberIds)) {
           data.memberIds.forEach(memberId => {
             if (memberId !== data.senderId) {
@@ -260,10 +259,10 @@ io.on('connection', (socket) => {
       }
     } else if (data.type === 'PRIVATE') {
       // --- PRIVATE DM PATH ---
-      // Force threadId to null (ignored) and route via user rooms strictly
       if (data.receiverId && data.receiverId !== data.senderId) {
+        // Send ONLY to the specific user rooms
         io.to(`user_${data.receiverId}`).emit('receive_message', data);
-        io.to(`user_${data.senderId}`).emit('receive_message', data);
+        io.to(`user_${data.senderId}`).emit('receive_message', data); // For sender sync
 
         socket.to(`user_${data.receiverId}`).emit('smart_notification', notificationPayload);
         socket.to('admins').emit('smart_notification', notificationPayload);
