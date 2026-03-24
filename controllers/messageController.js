@@ -6,13 +6,30 @@ const prisma = require('../prismaClient');
 const getMessages = async (req, res, next) => {
   try {
     const { threadId } = req.query;
-    let where = threadId ? { threadId } : {};
+    let where = {};
+
+    if (threadId) {
+      where = {
+        OR: [
+          { threadId: threadId }, // For Project/Team Groups
+          {
+            threadId: null, // For Private DMs
+            OR: [
+              { senderId: threadId },
+              { receiverId: threadId }
+            ]
+          }
+        ]
+      };
+    }
 
     // --- Access Control ---
     if (req.user.role === 'CLIENT') {
       where = {
         ...where,
-        OR: [{ senderId: req.user.id }, { receiverId: req.user.id }]
+        AND: [ // Client can only see their own DMs or Group messages
+          { OR: [{ senderId: req.user.id }, { receiverId: req.user.id }, { threadId: { not: null } }] }
+        ]
       };
     }
 
