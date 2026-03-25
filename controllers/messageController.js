@@ -72,7 +72,7 @@ const getMessages = async (req, res, next) => {
 
 const sendMessage = async (req, res, next) => {
   try {
-    const { content, receiverId, threadId } = req.body;
+    const { content, receiverId, threadId, parentId } = req.body;
 
     if (!content) {
       return res.status(400).json({ message: 'محتوى الرسالة مطلوب' });
@@ -359,4 +359,4 @@ const removeGroupMember = async (req, res, next) => {
   }
 };
 
-module.exports = { getMessages, sendMessage, getThreads, createTeamGroup, getTeamGroups, clearAllMessages, deleteTeamGroup, removeGroupMember };
+module.exports = { getMessages, sendMessage, getThreads, createTeamGroup, getTeamGroups, clearAllMessages, deleteTeamGroup, removeGroupMember, markAsRead, togglePinMessage };
