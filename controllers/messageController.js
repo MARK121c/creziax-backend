@@ -297,6 +297,17 @@ const togglePinMessage = async (req, res, next) => {
       }
     });
 
+    const io = req.app.get('io');
+    if (io) {
+      const room = message.threadId ? `project_${message.threadId}` : `user_${message.receiverId}`;
+      if (message.threadId) {
+        io.to(`project_${message.threadId}`).emit('message_pinned', { id, isPinned: updatedMessage.isPinned });
+      } else {
+        io.to(`user_${message.receiverId}`).emit('message_pinned', { id, isPinned: updatedMessage.isPinned });
+        io.to(`user_${message.senderId}`).emit('message_pinned', { id, isPinned: updatedMessage.isPinned });
+      }
+    }
+
     res.json(updatedMessage);
   } catch (err) {
     console.error("❌ Pin Toggle Error:", err);
@@ -391,6 +402,17 @@ const deleteMessage = async (req, res, next) => {
         where: { id },
         data: { isDeleted: true }
       });
+
+      const io = req.app.get('io');
+      if (io) {
+        if (msg.threadId) {
+          io.to(`project_${msg.threadId}`).emit('message_deleted', { id });
+        } else {
+          io.to(`user_${msg.receiverId}`).emit('message_deleted', { id });
+          io.to(`user_${msg.senderId}`).emit('message_deleted', { id });
+        }
+      }
+
       return res.json({ success: true, message: updated });
     } else {
       // v17.5 Strict Safeguard against null arrays
