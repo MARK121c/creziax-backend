@@ -414,6 +414,8 @@ const deleteMessage = async (req, res, next) => {
         } else {
           io.to(`user_${msg.receiverId}`).emit('message_deleted', { id });
           io.to(`user_${msg.senderId}`).emit('message_deleted', { id });
+          // Notify admins too for visibility
+          io.to('admins').emit('message_deleted', { id });
           console.log(`[Socket] Deleted private message ${id} for users ${msg.senderId} and ${msg.receiverId}`);
         }
       } else {
@@ -438,4 +440,20 @@ const deleteMessage = async (req, res, next) => {
   }
 };
 
-module.exports = { getMessages, sendMessage, getThreads, createTeamGroup, getTeamGroups, clearAllMessages, deleteTeamGroup, removeGroupMember, markAsRead, togglePinMessage, deleteMessage };
+const markAllAsRead = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    await prisma.message.updateMany({
+      where: { 
+        receiverId: userId,
+        isRead: false
+      },
+      data: { isRead: true }
+    });
+    res.json({ success: true, message: 'All messages marked as read' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getMessages, sendMessage, getThreads, createTeamGroup, getTeamGroups, clearAllMessages, deleteTeamGroup, removeGroupMember, markAsRead, togglePinMessage, deleteMessage, markAllAsRead };
