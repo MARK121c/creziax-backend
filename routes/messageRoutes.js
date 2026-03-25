@@ -10,7 +10,8 @@ const {
   deleteTeamGroup,
   removeGroupMember,
   markAsRead,      // NEW
-  togglePinMessage // NEW
+  togglePinMessage, // NEW
+  deleteMessage    // v17.2 Elite WhatsApp Deletion
 } = require('../controllers/messageController');
 
 const { protect, authorize } = require('../middleware/auth');
