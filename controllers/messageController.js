@@ -54,6 +54,13 @@ const getMessages = async (req, res, next) => {
       include: {
         sender: { select: { id: true, firstName: true, lastName: true, role: true, avatarUrl: true } },
         receiver: { select: { id: true, firstName: true, lastName: true, role: true, avatarUrl: true } },
+        parent: { // Include parent message for replies
+          select: {
+            id: true,
+            content: true,
+            sender: { select: { firstName: true, lastName: true } }
+          }
+        }
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -107,9 +114,17 @@ const sendMessage = async (req, res, next) => {
         senderId: req.user.id,
         receiverId: receiverId || null,
         threadId: threadId || null,
+        parentId: parentId || null,
       },
       include: {
         sender: { select: { id: true, firstName: true, lastName: true, role: true, avatarUrl: true } },
+        parent: {
+          select: {
+            id: true,
+            content: true,
+            sender: { select: { firstName: true, lastName: true } }
+          }
+        }
       },
     });
 
@@ -206,12 +221,74 @@ const clearAllMessages = async (req, res, next) => {
   try {
     const { threadId } = req.query;
     if (threadId) {
-      await prisma.message.deleteMany({ where: { threadId } });
-      return res.json({ message: 'تم مسح رسائل المحادثة بنجاح' });
+      // UNIVERSAL WIPE: Support both Group threads and Private DMs
+      await prisma.message.deleteMany({
+        where: {
+          OR: [
+            { threadId: threadId },
+            {
+              threadId: null,
+              OR: [
+                { senderId: threadId },
+                { receiverId: threadId }
+              ]
+            }
+          ]
+        }
+      });
+      return res.json({ message: 'تم مسح جميع الرسائل في هذه المحادثة بنجاح' });
     } else {
       await prisma.message.deleteMany({});
-      return res.json({ message: 'تم مسح جميع الرسائل بنجاح' });
+      return res.json({ message: 'تم مسح جميع الرسائل في السيستم بنجاح' });
     }
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Mark all messages in a thread as read
+// @route   POST /api/messages/mark-read
+// @access  Private
+const markAsRead = async (req, res, next) => {
+  try {
+    const { threadId } = req.body;
+    if (!threadId) return res.status(400).json({ message: 'Thread ID is required' });
+
+    await prisma.message.updateMany({
+      where: {
+        AND: [
+          { OR: [{ threadId: threadId }, { senderId: threadId }, { receiverId: threadId }] },
+          { receiverId: req.user.id },
+          { isRead: false }
+        ]
+      },
+      data: { isRead: true }
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Toggle pin status of a message
+// @route   PATCH /api/messages/:id/pin
+// @access  Private/Admin
+const togglePinMessage = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const message = await prisma.message.findUnique({ where: { id } });
+    if (!message) return res.status(404).json({ message: 'الرسالة غير موجودة' });
+
+    const updatedMessage = await prisma.message.update({
+      where: { id },
+      data: {
+        isPinned: !message.isPinned,
+        pinnedAt: !message.isPinned ? new Date() : null
+      }
+    });
+
+    res.json(updatedMessage);
   } catch (err) {
     next(err);
   }
