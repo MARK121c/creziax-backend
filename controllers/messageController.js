@@ -67,7 +67,7 @@ const getMessages = async (req, res, next) => {
 
     // v17.2 WhatsApp-Style Deletion Filters
     const processedMessages = messages
-      .filter(m => !m.deletedFor?.includes(req.user.id))
+      .filter(m => !(m.deletedFor || []).includes(req.user.id))
       .map(m => {
         if (m.isDeleted) return { ...m, content: '🚫 تم حذف هذه الرسالة', isDeleted: true };
         return m;
