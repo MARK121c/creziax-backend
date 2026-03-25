@@ -11,10 +11,11 @@ const {
   removeGroupMember,
   markAsRead,      // NEW
   togglePinMessage, // NEW
-  deleteMessage    // v17.2 Elite WhatsApp Deletion
+  deleteMessage,    // v17.2 Elite WhatsApp Deletion
+  markAllAsRead     // v17.5.3 Hardening
 } = require('../controllers/messageController');
 
-const { protect, authorize } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 
 router.use(protect);
 
@@ -22,19 +23,22 @@ router.route('/')
   .get(getMessages)
   .post(sendMessage);
 
+router.put('/mark-all-read', markAllAsRead); // v17.5.3
 router.post('/mark-read', markAsRead); // NEW
 
-router.patch('/:id/pin', authorize('ADMIN', 'OWNER'), togglePinMessage); // NEW
+router.delete('/:id', deleteMessage); // v17.2/v17.5.3
+
+router.patch('/:id/pin', togglePinMessage); // NEW
 
 router.route('/groups')
   .get(getTeamGroups)
-  .post(authorize('ADMIN', 'OWNER'), createTeamGroup);
+  .post(createTeamGroup);
 
-router.delete('/groups/:id', authorize('ADMIN', 'OWNER'), deleteTeamGroup);
-router.delete('/groups/:id/members/:userId', authorize('ADMIN', 'OWNER'), removeGroupMember);
+router.delete('/groups/:id', deleteTeamGroup);
+router.delete('/groups/:id/members/:userId', removeGroupMember);
 
-router.delete('/clear', authorize('ADMIN', 'OWNER'), clearAllMessages);
+router.delete('/clear', clearAllMessages);
 
-router.get('/threads', authorize('ADMIN'), getThreads);
+router.get('/threads', getThreads);
 
 module.exports = router;
