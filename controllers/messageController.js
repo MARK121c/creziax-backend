@@ -301,13 +301,25 @@ const togglePinMessage = async (req, res, next) => {
     if (io) {
       const room = message.threadId ? `project_${message.threadId}` : `user_${message.receiverId}`;
       io.to(room).emit('message_pinned', { id, isPinned: !message.isPinned });
-      // Also emit to sender for DMs
+      
+      // Mandatory: In a Private DM, broadcast to BOTH participants (even if they have multiple devices)
       if (!message.threadId) {
         io.to(`user_${message.senderId}`).emit('message_pinned', { id, isPinned: !message.isPinned });
+        io.to(`user_${message.receiverId}`).emit('message_pinned', { id, isPinned: !message.isPinned });
       }
-      console.log(`[Socket] Pinned message ${id} in room ${room}`);
+      
+      // Support for Admin/owner dashboard collective visibility
+      io.to('admins').emit('message_pinned', { 
+        id, 
+        isPinned: !message.isPinned, 
+        threadId: message.threadId, 
+        senderId: message.senderId, 
+        receiverId: message.receiverId 
+      });
+      
+      console.log(`[Socket-SUPREME] Pinned message ${id} in room ${room} and admins`);
     } else {
-      console.warn(`[Socket] IO instance not found for pinning ${id}`);
+      console.warn(`[Socket-SUPREME] IO instance not found for pinning ${id}`);
     }
 
     res.json(updatedMessage);
@@ -410,16 +422,17 @@ const deleteMessage = async (req, res, next) => {
         if (msg.threadId) {
           const projectRoom = `project_${msg.threadId}`;
           io.to(projectRoom).emit('message_deleted', { id });
-          console.log(`[Socket] Deleted message ${id} in room ${projectRoom}`);
+          // Notify admins for collective log sync
+          io.to('admins').emit('message_deleted', { id });
+          console.log(`[Socket-SUPREME] Deleted message ${id} in room ${projectRoom}`);
         } else {
           io.to(`user_${msg.receiverId}`).emit('message_deleted', { id });
           io.to(`user_${msg.senderId}`).emit('message_deleted', { id });
-          // Notify admins too for visibility
           io.to('admins').emit('message_deleted', { id });
-          console.log(`[Socket] Deleted private message ${id} for users ${msg.senderId} and ${msg.receiverId}`);
+          console.log(`[Socket-SUPREME] Deleted private message ${id} for all parties`);
         }
       } else {
-        console.warn(`[Socket] IO instance not found for deletion ${id}`);
+        console.warn(`[Socket-SUPREME] IO instance not found for deletion ${id}`);
       }
 
       return res.json({ success: true, message: 'Message deleted for everyone' });
