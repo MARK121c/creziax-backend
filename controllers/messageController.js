@@ -64,7 +64,16 @@ const getMessages = async (req, res, next) => {
       },
       orderBy: { createdAt: 'asc' },
     });
-    res.json(messages);
+
+    // v17.2 WhatsApp-Style Deletion Filters
+    const processedMessages = messages
+      .filter(m => !m.deletedFor?.includes(req.user.id))
+      .map(m => {
+        if (m.isDeleted) return { ...m, content: '🚫 تم حذف هذه الرسالة', isDeleted: true };
+        return m;
+      });
+
+    res.json(processedMessages);
   } catch (err) {
     next(err);
   }
@@ -359,4 +368,41 @@ const removeGroupMember = async (req, res, next) => {
   }
 };
 
-module.exports = { getMessages, sendMessage, getThreads, createTeamGroup, getTeamGroups, clearAllMessages, deleteTeamGroup, removeGroupMember, markAsRead, togglePinMessage };
+// @desc    v17.2 Delete a single message (for Everyone or just for Me)
+// @route   DELETE /api/messages/:id?type=everyone|me
+// @access  Private
+const deleteMessage = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { type } = req.query; // 'everyone' or 'me'
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    const msg = await prisma.message.findUnique({ where: { id } });
+    if (!msg) return res.status(404).json({ message: 'الرسالة غير موجودة' });
+
+    if (type === 'everyone') {
+      const isAdmin = userRole === 'ADMIN' || userRole === 'OWNER';
+      if (msg.senderId !== userId && !isAdmin) {
+        return res.status(403).json({ message: 'غير مصرح لك بحذف هذه الرسالة للجميع' });
+      }
+      const updated = await prisma.message.update({
+        where: { id },
+        data: { isDeleted: true }
+      });
+      return res.json({ success: true, message: updated });
+    } else {
+      if (!msg.deletedFor.includes(userId)) {
+        await prisma.message.update({
+          where: { id },
+          data: { deletedFor: { push: userId } }
+        });
+      }
+      return res.json({ success: true, id, type: 'me' });
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getMessages, sendMessage, getThreads, createTeamGroup, getTeamGroups, clearAllMessages, deleteTeamGroup, removeGroupMember, markAsRead, togglePinMessage, deleteMessage };
