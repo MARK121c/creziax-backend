@@ -300,12 +300,14 @@ const togglePinMessage = async (req, res, next) => {
     const io = req.app.get('io');
     if (io) {
       const room = message.threadId ? `project_${message.threadId}` : `user_${message.receiverId}`;
-      if (message.threadId) {
-        io.to(`project_${message.threadId}`).emit('message_pinned', { id, isPinned: updatedMessage.isPinned });
-      } else {
-        io.to(`user_${message.receiverId}`).emit('message_pinned', { id, isPinned: updatedMessage.isPinned });
-        io.to(`user_${message.senderId}`).emit('message_pinned', { id, isPinned: updatedMessage.isPinned });
+      io.to(room).emit('message_pinned', { id, isPinned: !message.isPinned });
+      // Also emit to sender for DMs
+      if (!message.threadId) {
+        io.to(`user_${message.senderId}`).emit('message_pinned', { id, isPinned: !message.isPinned });
       }
+      console.log(`[Socket] Pinned message ${id} in room ${room}`);
+    } else {
+      console.warn(`[Socket] IO instance not found for pinning ${id}`);
     }
 
     res.json(updatedMessage);
@@ -406,14 +408,19 @@ const deleteMessage = async (req, res, next) => {
       const io = req.app.get('io');
       if (io) {
         if (msg.threadId) {
-          io.to(`project_${msg.threadId}`).emit('message_deleted', { id });
+          const projectRoom = `project_${msg.threadId}`;
+          io.to(projectRoom).emit('message_deleted', { id });
+          console.log(`[Socket] Deleted message ${id} in room ${projectRoom}`);
         } else {
           io.to(`user_${msg.receiverId}`).emit('message_deleted', { id });
           io.to(`user_${msg.senderId}`).emit('message_deleted', { id });
+          console.log(`[Socket] Deleted private message ${id} for users ${msg.senderId} and ${msg.receiverId}`);
         }
+      } else {
+        console.warn(`[Socket] IO instance not found for deletion ${id}`);
       }
 
-      return res.json({ success: true, message: updated });
+      return res.json({ success: true, message: 'Message deleted for everyone' });
     } else {
       // v17.5 Strict Safeguard against null arrays
       const currentDeletedFor = msg.deletedFor || [];
