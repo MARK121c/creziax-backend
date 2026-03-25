@@ -265,6 +265,10 @@ model Message {
   pinnedAt    DateTime?
   isRead      Boolean  @default(false) // For Auto-Clear logic
 
+  // v17.2 Deletion Features WhatsApp Style
+  isDeleted   Boolean  @default(false)
+  deletedFor  String[] @default([])
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
