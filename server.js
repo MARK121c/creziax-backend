@@ -261,9 +261,18 @@ io.on('connection', (socket) => {
 
   socket.on('force_delete_chat', (data) => {
     if (!data.threadId) return;
-    const targetRoom = data.type === 'GROUP' ? `project_${data.threadId}` : `user_${data.threadId}`;
-    io.to(targetRoom).emit('chat_deleted', { threadId: data.threadId });
-    console.log(`Global Wipe: Chat ${data.threadId} broadcasted to ${targetRoom}`);
+    
+    // 1. Determine target rooms (Both participants if Private, Project room if Group)
+    if (data.type === 'GROUP') {
+      io.to(`project_${data.threadId}`).emit('chat_deleted', { threadId: data.threadId });
+    } else {
+      // In Private DMs, threadId is often the Counterparty ID from Admin perspective.
+      // We must broadcast to both the current user (Admin) and the Target (Client).
+      io.to(`user_${data.threadId}`).emit('chat_deleted', { threadId: data.threadId });
+      io.to(`user_${data.senderId || req?.user?.id}`).emit('chat_deleted', { threadId: data.threadId });
+    }
+    
+    console.log(`Universal Wipe: Chat ${data.threadId} broadcasted.`);
   });
 
   socket.on('disconnect', () => {
