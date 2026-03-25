@@ -8,8 +8,11 @@ const {
   getTeamGroups,
   clearAllMessages,
   deleteTeamGroup,
-  removeGroupMember
+  removeGroupMember,
+  markAsRead,      // NEW
+  togglePinMessage // NEW
 } = require('../controllers/messageController');
+
 const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect);
@@ -17,6 +20,10 @@ router.use(protect);
 router.route('/')
   .get(getMessages)
   .post(sendMessage);
+
+router.post('/mark-read', markAsRead); // NEW
+
+router.patch('/:id/pin', authorize('ADMIN', 'OWNER'), togglePinMessage); // NEW
 
 router.route('/groups')
   .get(getTeamGroups)
