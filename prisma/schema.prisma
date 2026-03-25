@@ -255,6 +255,16 @@ model Message {
   ticketId    String?
   ticket      Ticket?  @relation("TicketMessages", fields: [ticketId], references: [id], onDelete: Cascade)
 
+  // Reply System
+  parentId    String?
+  parent      Message?  @relation("MessageReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies     Message[] @relation("MessageReplies")
+
+  // Elite Features
+  isPinned    Boolean  @default(false)
+  pinnedAt    DateTime?
+  isRead      Boolean  @default(false) // For Auto-Clear logic
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
