@@ -299,6 +299,7 @@ const togglePinMessage = async (req, res, next) => {
 
     res.json(updatedMessage);
   } catch (err) {
+    console.error("❌ Pin Toggle Error:", err);
     next(err);
   }
 };
@@ -392,7 +393,9 @@ const deleteMessage = async (req, res, next) => {
       });
       return res.json({ success: true, message: updated });
     } else {
-      if (!msg.deletedFor.includes(userId)) {
+      // v17.5 Strict Safeguard against null arrays
+      const currentDeletedFor = msg.deletedFor || [];
+      if (!currentDeletedFor.includes(userId)) {
         await prisma.message.update({
           where: { id },
           data: { deletedFor: { push: userId } }
@@ -401,6 +404,7 @@ const deleteMessage = async (req, res, next) => {
       return res.json({ success: true, id, type: 'me' });
     }
   } catch (err) {
+    console.error("❌ Delete Error:", err);
     next(err);
   }
 };
