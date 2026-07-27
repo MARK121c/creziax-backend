@@ -1,0 +1,143 @@
+const prisma = require('../prismaClient');
+const path = require('path');
+const fs = require('fs');
+const supabase = require('../supabaseClient');
+
+// @desc    Get files for a project
+// @route   GET /api/files?projectId=xxx
+// @access  Private
+const getFiles = async (req, res, next) => {
+  try {
+    const { projectId } = req.query;
+    const where = projectId ? { projectId } : {};
+
+    if (req.user.role === 'CLIENT') {
+      const client = await prisma.client.findUnique({ where: { userId: req.user.id } });
+      if (!client) return res.status(404).json({ message: 'Client record not found' });
+      // Restrict files to projects belonging to this client
+      where.project = { clientId: client.id };
+    }
+
+    const files = await prisma.file.findMany({ where, include: { project: true, uploadedBy: { select: { id: true, firstName: true, lastName: true } } }, orderBy: { createdAt: 'desc' } });
+    res.json(files);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Upload a file
+// @route   POST /api/files
+// @access  Private
+const uploadFile = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const { projectId, fileType } = req.body;
+
+    if (!projectId) {
+      return res.status(400).json({ message: 'projectId is required' });
+    }
+
+    let fileUrl = `/storage/${req.file.filename}`;
+
+    // Try Supabase Storage if configured
+    if (process.env.SUPABASE_ANON_KEY) {
+      try {
+        console.log(`[STORAGE] Attempting file upload to Supabase: ${req.file.originalname}`);
+        const fileContent = fs.readFileSync(req.file.path);
+        const { data, error } = await supabase.storage
+          .from('creziax-assets')
+          .upload(`uploads/${Date.now()}-${req.file.originalname}`, fileContent, {
+            contentType: req.file.mimetype,
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) {
+          console.error("❌ [STORAGE] Supabase File Error:", error.message || "Unknown error (check 'creziax-assets' bucket)");
+        } else {
+          const { data: { publicUrl } } = supabase.storage
+            .from('creziax-assets')
+            .getPublicUrl(data.path);
+          fileUrl = publicUrl;
+          console.log(`[STORAGE] Supabase upload successful: ${fileUrl}`);
+          
+          // Delete local file after successful upload to Supabase
+          fs.unlinkSync(req.file.path);
+        }
+      } catch (supaErr) {
+        console.error("❌ [STORAGE] Supabase Upload Exception:", supaErr.message);
+      }
+    }
+
+    const file = await prisma.file.create({
+      data: {
+        name: req.file.filename,
+        originalName: req.file.originalname,
+        url: fileUrl,
+        fileType: fileType || 'DOCUMENT',
+        size: req.file.size,
+        projectId,
+        uploadedById: req.user.id,
+      },
+      include: { project: { include: { client: true } } }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      const notificationContent = `تم رفع ملف جديد: "${file.originalName}" في مشروع "${file.project.name}"`;
+      
+      // Notify Client
+      const clientUserId = file.project.client.userId;
+      if (clientUserId !== req.user.id) {
+        await prisma.notification.create({
+          data: {
+            content: notificationContent,
+            type: 'FILE_UPLOAD',
+            userId: clientUserId
+          }
+        });
+        io.to(`user_${clientUserId}`).emit('notification_created', {
+          content: notificationContent,
+          type: 'FILE_UPLOAD'
+        });
+      }
+
+      // Notify Admins
+      io.to('admins').emit('notification_created', {
+        content: `[إداري] ${notificationContent}`,
+        type: 'FILE_UPLOAD'
+      });
+    }
+
+    res.status(201).json(file);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Delete a file
+// @route   DELETE /api/files/:id
+// @access  Private/Admin
+const deleteFile = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const file = await prisma.file.findUnique({ where: { id } });
+    if (!file) return res.status(404).json({ message: 'File not found' });
+
+    // Delete physical file
+    const filePath = path.join(__dirname, '..', file.url);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    await prisma.file.delete({ where: { id } });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getFiles, uploadFile, deleteFile };
