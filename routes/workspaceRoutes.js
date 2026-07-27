@@ -33,7 +33,7 @@ router.route('/phases/:phaseId/tasks')
   .post(authorize('ADMIN'), createWorkspaceTask);
 
 router.route('/tasks/:id')
-  .put(authorize('ADMIN'), updateWorkspaceTask)
+  .put(updateWorkspaceTask)
   .delete(authorize('ADMIN'), deleteWorkspaceTask);
 
 // v21: Admin-only per-stage client visibility toggle
