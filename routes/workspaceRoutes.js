@@ -10,7 +10,8 @@ const {
   createWorkspaceTask,
   deleteWorkspaceTask,
   toggleStageVisibility,
-  submitClientFeedback
+  submitClientFeedback,
+  getClientWorkspaces
 } = require('../controllers/workspaceController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -18,6 +19,10 @@ router.use(protect);
 
 router.route('/')
   .get(getWorkspaces);
+
+// Client-specific: get own projects with phases + tasks
+router.route('/client/my')
+  .get(getClientWorkspaces);
 
 router.route('/:id')
   .get(getWorkspace);

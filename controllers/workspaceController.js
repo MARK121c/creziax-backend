@@ -52,6 +52,43 @@ exports.getWorkspaces = async (req, res) => {
   }
 };
 
+// @desc    Get workspaces for logged-in CLIENT with phases and tasks
+// @route   GET /api/workspaces/client/my
+// @access  Private/Client
+exports.getClientWorkspaces = async (req, res) => {
+  try {
+    // Find the client profile for this user
+    const clientProfile = await prisma.client.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!clientProfile) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const workspaces = await prisma.project.findMany({
+      where: { clientId: clientProfile.id },
+      include: {
+        phases: {
+          orderBy: { startDate: 'asc' },
+          include: {
+            tasks: {
+              orderBy: { createdAt: 'asc' }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ success: true, data: workspaces });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
+
+
 // @desc    Get single workspace details with stats
 // @route   GET /api/workspaces/:id
 // @access  Private/Admin
