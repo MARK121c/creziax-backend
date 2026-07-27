@@ -168,12 +168,59 @@ exports.getWorkspace = async (req, res) => {
   }
 };
 
+// Helper: Evaluate stage timers (Team deadline lockout & Client Auto-Approval)
+const evaluateStageTimers = (description, taskCreatedAt) => {
+  if (!description || description === 'null') return description;
+  try {
+    const meta = JSON.parse(description);
+    if (!meta || typeof meta !== 'object') return description;
+
+    let modified = false;
+    const stages = ['script', 'edit', 'thumbnail', 'publish'];
+    const now = Date.now();
+
+    stages.forEach(sKey => {
+      const stage = meta[sKey];
+      if (!stage || typeof stage !== 'object') return;
+
+      // 1. Team Deadline Expiry Check
+      if (!stage.teamDeadlineExpired && !stage.link && !stage.datetime) {
+        const teamHours = Number(stage.teamDeadlineHours) || 24;
+        const startTime = stage.teamDeadlineStartedAt
+          ? new Date(stage.teamDeadlineStartedAt).getTime()
+          : new Date(taskCreatedAt || Date.now()).getTime();
+        
+        if (startTime + teamHours * 3600 * 1000 <= now) {
+          stage.teamDeadlineExpired = true;
+          stage.penaltyApplied = true;
+          modified = true;
+        }
+      }
+
+      // 2. Client Auto-Approval Timer Check
+      if (stage.visible && stage.clientTimerStartedAt && (stage.approvalStatus === 'PENDING' || stage.approvalStatus === 'REVISION_DONE')) {
+        const reviewHours = Number(stage.clientReviewHours) || 12;
+        const startTime = new Date(stage.clientTimerStartedAt).getTime();
+
+        if (startTime + reviewHours * 3600 * 1000 <= now) {
+          stage.approvalStatus = 'AUTO_APPROVED';
+          modified = true;
+        }
+      }
+    });
+
+    return modified ? JSON.stringify(meta) : description;
+  } catch (_) {
+    return description;
+  }
+};
+
 // @desc    Get tasks for a specific phase (Lazy Loading)
 // @route   GET /api/workspaces/phases/:phaseId/tasks
 // @access  Private/Admin
 exports.getPhaseTasks = async (req, res) => {
   try {
-    const tasks = await prisma.task.findMany({
+    const rawTasks = await prisma.task.findMany({
       where: { phaseId: req.params.phaseId },
       include: {
         assignedTo: {
@@ -192,6 +239,19 @@ exports.getPhaseTasks = async (req, res) => {
         createdAt: 'asc'
       }
     });
+
+    // Evaluate stage timers dynamically on fetch
+    const tasks = await Promise.all(rawTasks.map(async (t) => {
+      const evaluatedDesc = evaluateStageTimers(t.description, t.createdAt);
+      if (evaluatedDesc !== t.description) {
+        // Background sync to DB
+        try {
+          await prisma.task.update({ where: { id: t.id }, data: { description: evaluatedDesc } });
+        } catch (_) {}
+        return { ...t, description: evaluatedDesc };
+      }
+      return t;
+    }));
 
     res.json({
       success: true,
