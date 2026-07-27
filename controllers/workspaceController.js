@@ -271,8 +271,11 @@ exports.toggleStageVisibility = async (req, res) => {
       meta[stage] = {};
     }
 
-    // Patch ONLY the visible field for this stage
+    // Patch ONLY the visible field for this stage and start timer if making visible
     meta[stage].visible = !!visible;
+    if (visible && (!meta[stage].clientTimerStartedAt || meta[stage].approvalStatus === 'REVISION_DONE')) {
+      meta[stage].clientTimerStartedAt = new Date().toISOString();
+    }
 
     const updated = await prisma.task.update({
       where: { id: req.params.id },
