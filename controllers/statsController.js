@@ -18,21 +18,26 @@ exports.getDashboardStats = async (req, res) => {
       };
     }
 
-    // 1. User counts
-    const clientsCount = await prisma.user.count({ where: { role: 'CLIENT', ...dateFilter } });
-    const teamCount    = await prisma.user.count({ where: { role: 'TEAM', ...dateFilter } });
-    const adminsCount  = await prisma.user.count({ where: { role: { in: ['ADMIN', 'OWNER'] }, ...dateFilter } });
+    // 1. User counts (Persistent & based on active status)
+    const clientsCount = await prisma.user.count({ where: { role: 'CLIENT', isActive: true } });
+    const teamCount    = await prisma.user.count({ where: { role: 'TEAM', isActive: true } });
+    const adminsCount  = await prisma.user.count({ where: { role: { in: ['ADMIN', 'OWNER'] }, isActive: true } });
 
     // 2. Active Projects
     const activeProjectsCount = await prisma.project.count({
-      where: { status: { not: 'COMPLETED' }, ...dateFilter }
+      where: { status: { not: 'COMPLETED' }, isArchived: false }
     });
 
     // 3. Total Tasks
-    const totalTasksCount = await prisma.task.count({ where: dateFilter });
+    const totalTasksCount = await prisma.task.count({
+      where: { project: { isArchived: false } }
+    });
 
-    // 4. Managed Channels
-    const clientsData = await prisma.client.findMany({ select: { managedChannels: true }, where: dateFilter });
+    // 4. Managed Channels (from active clients)
+    const clientsData = await prisma.client.findMany({
+      select: { managedChannels: true },
+      where: { user: { isActive: true } }
+    });
     const totalManagedChannels = clientsData.reduce((acc, curr) => acc + (curr.managedChannels || 0), 0);
 
     // ------- UNIFIED LEDGER (v20.6) -------

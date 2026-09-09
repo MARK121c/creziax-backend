@@ -8,7 +8,14 @@ const getUsers = async (req, res, next) => {
   try {
     const users = await prisma.user.findMany({
       include: {
-        clientInfo: true,
+        clientInfo: {
+          include: {
+            invoices: {
+              where: { status: 'PAID' },
+              select: { amount: true }
+            }
+          }
+        },
         teamMemberInfo: {
           include: {
             tasks: { where: { status: 'DELIVERED' } }
@@ -20,6 +27,26 @@ const getUsers = async (req, res, next) => {
     });
     
     const enrichedUsers = users.map(u => {
+      if (u.role === 'CLIENT') {
+        const totalPaid = u.clientInfo?.invoices?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0;
+        return {
+          ...u,
+          totalPaid,
+          company: u.clientInfo?.company,
+          phone: u.clientInfo?.phone,
+          tier: u.clientInfo?.tier,
+          isVip: u.clientInfo?.isVip,
+          logoUrl: u.clientInfo?.logoUrl,
+          notionLink: u.clientInfo?.notionLink,
+          telegram: u.clientInfo?.telegram,
+          managedChannels: u.clientInfo?.managedChannels,
+          healthScore: u.clientInfo?.healthScore,
+          internalNotes: u.clientInfo?.internalNotes,
+          preferredCurrency: u.clientInfo?.preferredCurrency,
+          contractStartDate: u.clientInfo?.contractStartDate,
+          contractEndDate: u.clientInfo?.contractEndDate,
+        };
+      }
       if (u.role === 'TEAM' || u.role === 'ADMIN' || u.role === 'OWNER') {
         const tm = u.teamMemberInfo || {};
         const totalPaid = u.expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
@@ -75,7 +102,14 @@ const getUser = async (req, res, next) => {
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
-        clientInfo: true,
+        clientInfo: {
+          include: {
+            invoices: {
+              where: { status: 'PAID' },
+              select: { amount: true }
+            }
+          }
+        },
         teamMemberInfo: {
           include: {
             tasks: { where: { status: 'DELIVERED' } }
@@ -87,6 +121,10 @@ const getUser = async (req, res, next) => {
     });
 
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.role === 'CLIENT') {
+      user.totalPaid = user.clientInfo?.invoices?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0;
+    }
 
     if (user.role === 'TEAM' || user.role === 'ADMIN' || user.role === 'OWNER') {
       const tm = user.teamMemberInfo || {};

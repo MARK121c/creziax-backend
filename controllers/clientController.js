@@ -123,9 +123,13 @@ const updateClient = async (req, res, next) => {
       data.managedChannels = parseInt(managedChannels);
     }
     // Optional: Update linked user data
-    const { firstName, lastName, email, password } = req.body;
-    if (firstName || lastName || email || (password && password.trim() !== '')) {
-      const userData = { firstName, lastName, email };
+    const { firstName, lastName, email, password, isActive } = req.body;
+    if (firstName || lastName || email || (password && password.trim() !== '') || isActive !== undefined) {
+      const userData = {};
+      if (firstName) userData.firstName = firstName;
+      if (lastName) userData.lastName = lastName;
+      if (email) userData.email = email;
+      if (isActive !== undefined) userData.isActive = !!isActive;
       if (password && password.trim() !== '') {
         const bcrypt = require('bcryptjs');
         const salt = await bcrypt.genSalt(10);
@@ -143,7 +147,8 @@ const updateClient = async (req, res, next) => {
 
     const client = await prisma.client.update({ 
       where: { id }, 
-      data
+      data,
+      include: { user: true }
     });
     res.json(client);
   } catch (err) {

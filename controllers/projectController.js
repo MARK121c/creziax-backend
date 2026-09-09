@@ -2,6 +2,30 @@
 const prisma = require('../prismaClient');
 const { generateContractPDF } = require('../services/pdfService');
 
+// Helper to sanitize task description for CLIENT role (securely strips links if visible is false)
+const sanitizeDescriptionForClient = (description) => {
+  if (!description || description === 'null') return description;
+  try {
+    const meta = JSON.parse(description);
+    if (!meta || typeof meta !== 'object') return description;
+    const stages = ['script', 'edit', 'thumbnail', 'publish'];
+    stages.forEach(sKey => {
+      const stage = meta[sKey];
+      if (stage && typeof stage === 'object') {
+        const hasValue = !!(stage.link || stage.datetime);
+        stage.hasLink = hasValue;
+        if (!stage.visible) {
+          stage.link = '';
+          stage.datetime = '';
+        }
+      }
+    });
+    return JSON.stringify(meta);
+  } catch (_) {
+    return description;
+  }
+};
+
 // Get all projects
 const getProjects = async (req, res, next) => {
   try {
@@ -37,6 +61,21 @@ const getProjects = async (req, res, next) => {
         }
       } 
     });
+
+    if (req.user.role === 'CLIENT') {
+      const sanitized = projects.map(p => ({
+        ...p,
+        phases: (p.phases || []).map(ph => ({
+          ...ph,
+          tasks: (ph.tasks || []).map(t => ({
+            ...t,
+            description: sanitizeDescriptionForClient(t.description)
+          }))
+        }))
+      }));
+      return res.json(sanitized);
+    }
+
     res.json(projects);
   } catch (err) {
     next(err);
@@ -74,6 +113,14 @@ const getProject = async (req, res, next) => {
       if (!clientRecord || project.clientId !== clientRecord.id) {
         return res.status(403).json({ message: 'Not authorized for this project' });
       }
+
+      project.phases = (project.phases || []).map(ph => ({
+        ...ph,
+        tasks: (ph.tasks || []).map(t => ({
+          ...t,
+          description: sanitizeDescriptionForClient(t.description)
+        }))
+      }));
     }
 
     res.json(project);

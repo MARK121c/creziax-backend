@@ -81,7 +81,33 @@ exports.getClientWorkspaces = async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    res.json({ success: true, data: workspaces });
+    const sanitized = workspaces.map(p => ({
+      ...p,
+      phases: (p.phases || []).map(ph => ({
+        ...ph,
+        tasks: (ph.tasks || []).map(t => {
+          let desc = t.description;
+          try {
+            if (desc && desc !== 'null') {
+              const meta = JSON.parse(desc);
+              ['script', 'edit', 'thumbnail', 'publish'].forEach(sKey => {
+                if (meta[sKey]) {
+                  meta[sKey].hasLink = !!(meta[sKey].link || meta[sKey].datetime);
+                  if (!meta[sKey].visible) {
+                    meta[sKey].link = '';
+                    meta[sKey].datetime = '';
+                  }
+                }
+              });
+              desc = JSON.stringify(meta);
+            }
+          } catch (_) {}
+          return { ...t, description: desc };
+        })
+      }))
+    }));
+
+    res.json({ success: true, data: sanitized });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server Error' });
