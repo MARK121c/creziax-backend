@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "npx prisma generate && npx prisma migrate deploy && node server.js",
+    "start": "node server.js",
     "build": "npx prisma generate",
     "postinstall": "prisma generate",
     "seed": "node services/seed.js",
@@ -35,11 +35,11 @@
     "pdfkit": "^0.16.0",
     "pg": "^8.20.0",
     "pg-hstore": "^2.3.4",
+    "prisma": "^6.5.0",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14",
-    "prisma": "^6.5.0"
+    "nodemon": "^3.1.14"
   }
 }
