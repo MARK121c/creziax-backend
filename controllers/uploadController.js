@@ -1,8 +1,9 @@
 const supabase = require('../supabaseClient');
 const sharp = require('sharp');
 const path = require('path');
+const fs = require('fs');
 
-// @desc    Upload an image (Avatar or Logo)
+// @desc    Upload an image (Avatar or Logo - max 5MB)
 // @route   POST /api/upload/image
 // @access  Private
 const uploadImage = async (req, res, next) => {
@@ -11,7 +12,6 @@ const uploadImage = async (req, res, next) => {
       return res.status(400).json({ message: 'No image uploaded' });
     }
 
-    // Enforce strict 5MB limit
     if (req.file.size > 5 * 1024 * 1024) {
       return res.status(413).json({ 
         message: 'File size too large', 
@@ -20,8 +20,6 @@ const uploadImage = async (req, res, next) => {
     }
 
     // Process image with sharp
-    // Resize to max 800px width/height while maintaining aspect ratio
-    // Convert to webp with 80% quality for best compression/quality ratio
     const buffer = await sharp(req.file.buffer)
       .resize({
         width: 800,
@@ -35,12 +33,11 @@ const uploadImage = async (req, res, next) => {
     let publicUrl = '';
     const fileName = `images/${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
 
-    // Try Supabase Storage if configured
     if (supabase) {
       try {
         console.log(`[STORAGE] Attempting Supabase upload for ${fileName}...`);
         const { data, error } = await supabase.storage
-          .from('creziax-assets') // Standardized bucket
+          .from('creziax-assets')
           .upload(fileName, buffer, {
             contentType: 'image/webp',
             cacheControl: '3600',
@@ -54,24 +51,20 @@ const uploadImage = async (req, res, next) => {
           publicUrl = supaUrl;
           console.log(`[STORAGE] Supabase upload success: ${publicUrl}`);
         } else {
-          console.error("❌ [STORAGE] Supabase Error:", error?.message || "Unknown error (check if 'creziax-assets' bucket exists)");
+          console.error("❌ [STORAGE] Supabase Error:", error?.message);
         }
       } catch (supaErr) {
         console.error("❌ [STORAGE] Exception during Supabase upload:", supaErr.message);
       }
     }
 
-    // Fallback to local storage if publicUrl is still empty
     if (!publicUrl) {
-      const fs = require('fs');
       const storagePath = path.join(__dirname, '..', 'storage', 'images');
       if (!fs.existsSync(storagePath)) {
         fs.mkdirSync(storagePath, { recursive: true });
       }
       const localFilePath = path.join(storagePath, path.basename(fileName));
       fs.writeFileSync(localFilePath, buffer);
-      
-      // Get the backend URL from env or fallback to relative
       publicUrl = `/storage/images/${path.basename(fileName)}`;
     }
 
@@ -81,12 +74,12 @@ const uploadImage = async (req, res, next) => {
       size: buffer.length
     });
   } catch (err) {
-    console.error("Upload Logic Error:", err);
+    console.error("Upload Image Error:", err);
     next(err);
   }
 };
 
-// @desc    Upload any file (up to 100MB)
+// @desc    Upload any file / media (Images, Videos, Docs - up to 1GB)
 // @route   POST /api/upload/file
 // @access  Private
 const uploadAnyFile = async (req, res, next) => {
@@ -95,62 +88,44 @@ const uploadAnyFile = async (req, res, next) => {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    if (req.file.size > 100 * 1024 * 1024) {
+    // 1GB limit check
+    if (req.file.size > 1024 * 1024 * 1024) {
+      // If saved to disk, remove temporary file
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
       return res.status(413).json({ 
         message: 'File size too large', 
-        error: 'حجم الملف كبير جداً، الحد الأقصى هو 100 ميجا بايت' 
+        error: 'حجم الملف كبير جداً، الحد الأقصى هو 1 جيجابايت' 
       });
     }
 
     let publicUrl = '';
-    const ext = path.extname(req.file.originalname) || '';
-    const fileName = `files/${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const filename = req.file.filename || `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(req.file.originalname) || ''}`;
 
-    if (supabase) {
-      try {
-        console.log(`[STORAGE] Attempting any-file Supabase upload: ${fileName}...`);
-        const { data, error } = await supabase.storage
-          .from('creziax-assets') 
-          .upload(fileName, req.file.buffer, {
-            contentType: req.file.mimetype,
-            cacheControl: '3600',
-            upsert: false
-          });
-
-        if (!error && data) {
-          const { data: { publicUrl: supaUrl } } = supabase.storage
-            .from('creziax-assets')
-            .getPublicUrl(data.path);
-          publicUrl = supaUrl;
-          console.log(`[STORAGE] Supabase file upload success: ${publicUrl}`);
-        } else {
-          console.error("❌ [STORAGE] Supabase File Error:", error?.message || "Unknown error (check 'creziax-assets' bucket)");
-        }
-      } catch (e) {
-        console.error("❌ [STORAGE] Supabase File Exception:", e.message);
-      }
-    }
-
-    if (!publicUrl) {
-      const fs = require('fs');
+    // If file was streamed to disk directly by multer.diskStorage:
+    if (req.file.path) {
+      publicUrl = `/storage/files/${filename}`;
+    } else if (req.file.buffer) {
+      // Memory buffer fallback
       const storagePath = path.join(__dirname, '..', 'storage', 'files');
       if (!fs.existsSync(storagePath)) {
         fs.mkdirSync(storagePath, { recursive: true });
       }
-      const localFilePath = path.join(storagePath, path.basename(fileName));
+      const localFilePath = path.join(storagePath, filename);
       fs.writeFileSync(localFilePath, req.file.buffer);
-      
-      publicUrl = `/storage/files/${path.basename(fileName)}`;
+      publicUrl = `/storage/files/${filename}`;
     }
 
     res.status(201).json({ 
       url: publicUrl,
+      fileUrl: publicUrl,
       name: req.file.originalname,
       size: req.file.size,
       type: req.file.mimetype
     });
   } catch (err) {
-    console.error("Upload File Logic Error:", err);
+    console.error("Upload File Error:", err);
     next(err);
   }
 };

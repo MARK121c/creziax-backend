@@ -9,18 +9,21 @@ const {
   resetPassword,
   grantChatAccess,
   getClientContacts,
-  getTeamContacts
+  getTeamContacts,
+  getPresenceUsers,
+  getUserPerformance
 } = require('../controllers/userController');
 const { protect, authorize } = require('../middleware/auth');
 
-// Client specific route (Requires authentication but not ADMIN)
-router.get('/client-contacts', protect, getClientContacts);
-
-// Team specific route (Requires authentication, accessible by Team members)
-router.get('/team-contacts', protect, getTeamContacts);
-
-// All user routes require authentication and ADMIN role
 router.use(protect);
+
+// Presence & Contacts (All authenticated users)
+router.get('/presence', getPresenceUsers);
+router.get('/client-contacts', getClientContacts);
+router.get('/team-contacts', getTeamContacts);
+router.get('/:id/performance', getUserPerformance);
+
+// All user management routes require ADMIN or OWNER role
 router.use(authorize('ADMIN', 'OWNER'));
 
 router.route('/')
@@ -34,7 +37,5 @@ router.route('/:id')
 
 router.post('/:id/reset-password', resetPassword);
 router.patch('/:id/grant-chat', grantChatAccess);
-
-module.exports = router;
 
 module.exports = router;

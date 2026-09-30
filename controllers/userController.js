@@ -1,6 +1,83 @@
 const prisma = require('../prismaClient');
 const bcrypt = require('bcryptjs');
 
+// Calculate comprehensive team performance & commitment metrics
+const calculateTeamPerformance = (tasks = []) => {
+  const totalTasks = tasks.length;
+  if (totalTasks === 0) {
+    return {
+      totalTasks: 0,
+      completedTasks: 0,
+      inProgressTasks: 0,
+      onTimeTasks: 0,
+      overdueTasks: 0,
+      completionRate: 100,
+      onTimeRate: 100,
+      commitmentScore: 100,
+      rating: 'ممتاز',
+      lifetimeVideos: 0,
+      averageDeliveryHours: '0.0'
+    };
+  }
+
+  const completedTasksList = tasks.filter(t => t.status === 'DELIVERED');
+  const completedTasks = completedTasksList.length;
+  const inProgressTasks = totalTasks - completedTasks;
+
+  const now = new Date();
+  let onTimeTasks = 0;
+  completedTasksList.forEach(t => {
+    if (!t.deadline || new Date(t.updatedAt) <= new Date(t.deadline)) {
+      onTimeTasks++;
+    }
+  });
+
+  let overdueTasks = 0;
+  tasks.forEach(t => {
+    if (t.status !== 'DELIVERED' && t.deadline && new Date(t.deadline) < now) {
+      overdueTasks++;
+    }
+  });
+
+  const completionRate = Math.round((completedTasks / totalTasks) * 100);
+  const onTimeRate = completedTasks > 0 ? Math.round((onTimeTasks / completedTasks) * 100) : 100;
+
+  // Commitment Score Formula (مؤشر التزام أفراد الفريق):
+  // 60% completion rate + 40% on-time delivery rate - 5% per overdue active task
+  let rawScore = (completionRate * 0.6) + (onTimeRate * 0.4) - (overdueTasks * 5);
+  const commitmentScore = Math.min(100, Math.max(0, Math.round(rawScore)));
+
+  let rating = 'ممتاز';
+  if (commitmentScore < 50) {
+    rating = 'يحتاج تحسين';
+  } else if (commitmentScore < 75) {
+    rating = 'جيد';
+  } else if (commitmentScore < 90) {
+    rating = 'جيد جداً';
+  }
+
+  // Delivery time
+  let avgDeliveryHours = '0.0';
+  if (completedTasks > 0) {
+    const totalMs = completedTasksList.reduce((sum, t) => sum + (new Date(t.updatedAt) - new Date(t.createdAt)), 0);
+    avgDeliveryHours = ((totalMs / completedTasks) / (1000 * 60 * 60)).toFixed(1);
+  }
+
+  return {
+    totalTasks,
+    completedTasks,
+    inProgressTasks,
+    onTimeTasks,
+    overdueTasks,
+    completionRate,
+    onTimeRate,
+    commitmentScore,
+    rating,
+    lifetimeVideos: completedTasks,
+    averageDeliveryHours: avgDeliveryHours
+  };
+};
+
 // @desc    Get all users
 // @route   GET /api/users
 // @access  Private/Admin
@@ -18,7 +95,7 @@ const getUsers = async (req, res, next) => {
         },
         teamMemberInfo: {
           include: {
-            tasks: { where: { status: 'DELIVERED' } }
+            tasks: true
           }
         },
         expenses: true,
@@ -53,15 +130,7 @@ const getUsers = async (req, res, next) => {
         const monthlySalary = tm.monthlySalary || 0;
         const totalBonuses = u.bonuses?.reduce((sum, b) => sum + (b.amount || 0), 0) || 0;
         
-        let lifetimeVideos = 0;
-        let avgDeliveryMs = 0;
-        if (tm.tasks && tm.tasks.length > 0) {
-          lifetimeVideos = tm.tasks.length;
-          const totalMs = tm.tasks.reduce((sum, t) => sum + (new Date(t.updatedAt) - new Date(t.createdAt)), 0);
-          avgDeliveryMs = totalMs / lifetimeVideos;
-        }
-        
-        const avgDeliveryHours = (avgDeliveryMs / (1000 * 60 * 60)).toFixed(1);
+        const performance = calculateTeamPerformance(tm.tasks || []);
 
         return {
           ...u,
@@ -73,10 +142,7 @@ const getUsers = async (req, res, next) => {
           managedChannels: tm.managedChannels,
           healthScore: tm.healthScore,
           internalNotes: tm.internalNotes,
-          performance: {
-            lifetimeVideos,
-            averageDeliveryHours: avgDeliveryHours
-          },
+          performance,
           finance: {
             totalSalary: monthlySalary,
             earnedBonuses: totalBonuses,
@@ -112,7 +178,7 @@ const getUser = async (req, res, next) => {
         },
         teamMemberInfo: {
           include: {
-            tasks: { where: { status: 'DELIVERED' } }
+            tasks: true
           }
         },
         expenses: true,
@@ -131,16 +197,8 @@ const getUser = async (req, res, next) => {
       const totalPaid = user.expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
       const monthlySalary = tm.monthlySalary || 0;
       const totalBonuses = user.bonuses?.reduce((sum, b) => sum + (b.amount || 0), 0) || 0;
-        
-      let lifetimeVideos = 0;
-      let avgDeliveryMs = 0;
-      if (tm.tasks && tm.tasks.length > 0) {
-        lifetimeVideos = tm.tasks.length;
-        const totalMs = tm.tasks.reduce((sum, t) => sum + (new Date(t.updatedAt) - new Date(t.createdAt)), 0);
-        avgDeliveryMs = totalMs / lifetimeVideos;
-      }
       
-      const avgDeliveryHours = (avgDeliveryMs / (1000 * 60 * 60)).toFixed(1);
+      const performance = calculateTeamPerformance(tm.tasks || []);
 
       user.position = tm.position;
       user.company = tm.company;
@@ -151,10 +209,7 @@ const getUser = async (req, res, next) => {
       user.healthScore = tm.healthScore;
       user.internalNotes = tm.internalNotes;
       
-      user.performance = {
-        lifetimeVideos,
-        averageDeliveryHours: avgDeliveryHours
-      };
+      user.performance = performance;
 
       user.finance = {
         totalSalary: monthlySalary,
@@ -530,9 +585,6 @@ const getClientContacts = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-};
-
-
 // @desc    Get admin/owner contacts for team members
 // @route   GET /api/users/team-contacts
 // @access  Private (Team)
@@ -548,5 +600,90 @@ const getTeamContacts = async (req, res, next) => {
   }
 };
 
-module.exports = { getUsers, getUser, createUser, updateUser, deleteUser, resetPassword, grantChatAccess, getClientContacts, getTeamContacts };
+
+
+// @desc    Get real-time presence of all active users
+// @route   GET /api/users/presence
+// @access  Private
+const getPresenceUsers = async (req, res, next) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        avatarUrl: true,
+        isOnline: true,
+        lastActiveAt: true
+      }
+    });
+    res.json(users);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Get specific user performance metrics
+// @route   GET /api/users/:id/performance
+// @access  Private
+const getUserPerformance = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        teamMemberInfo: {
+          include: {
+            tasks: {
+              include: {
+                project: { select: { id: true, name: true } }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const tasks = user.teamMemberInfo?.tasks || [];
+    const performance = calculateTeamPerformance(tasks);
+
+    res.json({
+      userId: user.id,
+      name: `${user.firstName} ${user.lastName}`,
+      role: user.role,
+      position: user.teamMemberInfo?.position,
+      performance,
+      tasks: tasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        deadline: t.deadline,
+        projectName: t.project?.name,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  getUsers,
+  getUser,
+  createUser,
+  updateUser,
+  deleteUser,
+  resetPassword,
+  grantChatAccess,
+  getClientContacts,
+  getTeamContacts,
+  getPresenceUsers,
+  getUserPerformance
+};
+
 

@@ -64,8 +64,8 @@ app.use((req, res, next) => {
 });
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // --- PRIORITIZED STATIC ASSET SERVING ---
 // Add /api/storage alias for robustness with some frontend constructions
@@ -167,7 +167,8 @@ const workspaceRoutes = require('./routes/workspaceRoutes');
 const contractRoutes = require('./routes/contractRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const publishScheduleRoutes = require('./routes/publishScheduleRoutes');
-const { runRetentionPolicy } = require('./services/retentionService');
+const leadRoutes = require('./routes/leadRoutes');
+const { runRetentionPolicy, cleanExpiredMedia } = require('./services/retentionService');
 
 app.get('/api/test-contracts', async (req, res) => {
   try {
@@ -199,10 +200,16 @@ app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/publish-schedules', publishScheduleRoutes);
+app.use('/api/leads', leadRoutes);
 
 // Data Retention Cron Job (Run daily at midnight)
 cron.schedule('0 0 * * *', () => {
   runRetentionPolicy();
+});
+
+// Auto-delete chat media files older than 48 hours (Run every hour)
+cron.schedule('0 * * * *', () => {
+  cleanExpiredMedia(48);
 });
 
 // Contract Renewal Check (Run daily at 9:00 AM)
@@ -210,6 +217,9 @@ const { checkContractRenewals } = require('./services/contractService');
 cron.schedule('0 9 * * *', () => {
   checkContractRenewals();
 });
+
+// Active User Socket Presence Tracking
+const onlineUserSockets = new Map(); // userId -> Set<socketId>
 
 // Socket.io events
 io.on('connection', (socket) => {
@@ -220,6 +230,25 @@ io.on('connection', (socket) => {
       const userId = data.userId;
       socket.data.userId = userId;
       socket.join(`user_${userId}`);
+      
+      // Realtime Presence Tracking
+      if (!onlineUserSockets.has(userId)) {
+        onlineUserSockets.set(userId, new Set());
+      }
+      onlineUserSockets.get(userId).add(socket.id);
+
+      // Broadcast user is online
+      io.emit('user_presence_change', {
+        userId,
+        isOnline: true,
+        lastActiveAt: new Date()
+      });
+
+      // Update User DB record asynchronously
+      prisma.user.update({
+        where: { id: userId },
+        data: { isOnline: true, lastActiveAt: new Date() }
+      }).catch(err => console.error('[Presence DB Update Error]', err.message));
       
       if (data.role === 'ADMIN' || data.role === 'OWNER') {
         socket.join('admins');
@@ -313,6 +342,24 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    const userId = socket.data.userId;
+    if (userId && onlineUserSockets.has(userId)) {
+      const userSockets = onlineUserSockets.get(userId);
+      userSockets.delete(socket.id);
+      if (userSockets.size === 0) {
+        onlineUserSockets.delete(userId);
+        const now = new Date();
+        io.emit('user_presence_change', {
+          userId,
+          isOnline: false,
+          lastActiveAt: now
+        });
+        prisma.user.update({
+          where: { id: userId },
+          data: { isOnline: false, lastActiveAt: now }
+        }).catch(err => console.error('[Presence DB Disconnect Error]', err.message));
+      }
+    }
     console.log('User disconnected:', socket.id);
   });
 });

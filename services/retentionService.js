@@ -1,11 +1,56 @@
+const fs = require('fs');
+const path = require('path');
 const prisma = require('../prismaClient');
 
 /**
  * Retention Service
  * Handles archiving and deleting data older than a specified period (default 30 days)
+ * And auto-deleting chat media files older than 48 hours to preserve server storage
  */
 
 const ARCHIVE_AFTER_DAYS = 30;
+const MEDIA_EXPIRE_HOURS = 48;
+
+/**
+ * Auto-delete chat media files older than 48 hours
+ */
+const cleanExpiredMedia = async (maxAgeHours = MEDIA_EXPIRE_HOURS) => {
+  console.log(`[${new Date().toISOString()}] Running 48-Hour Media Cleanup Job...`);
+  const cutoffTime = Date.now() - (maxAgeHours * 60 * 60 * 1000);
+  const foldersToClean = [
+    path.join(__dirname, '..', 'storage', 'files'),
+    path.join(__dirname, '..', 'storage', 'images')
+  ];
+
+  let deletedCount = 0;
+  let freedBytes = 0;
+
+  for (const folder of foldersToClean) {
+    if (!fs.existsSync(folder)) continue;
+
+    try {
+      const files = fs.readdirSync(folder);
+      for (const file of files) {
+        const filePath = path.join(folder, file);
+        try {
+          const stats = fs.statSync(filePath);
+          if (stats.isFile() && stats.mtimeMs < cutoffTime) {
+            freedBytes += stats.size;
+            fs.unlinkSync(filePath);
+            deletedCount++;
+          }
+        } catch (fileErr) {
+          console.error(`[MediaCleanup] Error processing file ${file}:`, fileErr.message);
+        }
+      }
+    } catch (dirErr) {
+      console.error(`[MediaCleanup] Error reading folder ${folder}:`, dirErr.message);
+    }
+  }
+
+  const freedMB = (freedBytes / (1024 * 1024)).toFixed(2);
+  console.log(`[${new Date().toISOString()}] Media Cleanup Completed: Deleted ${deletedCount} files older than ${maxAgeHours}h (Freed ${freedMB} MB).`);
+};
 
 const runRetentionPolicy = async () => {
   console.log(`[${new Date().toISOString()}] Starting Data Retention Job...`);
@@ -17,12 +62,11 @@ const runRetentionPolicy = async () => {
     // 1. Archive & Delete Notifications
     await archiveAndDelete('Notification', cutoffDate);
     
-    // 2. Archive & Delete Messages (Threads) - Optional, but user mentioned "بيانات (Logs)"
-    // We'll archive messages that are part of closed tickets only to be safe,
-    // or just generic notifications/logs for now.
-    
-    // 3. Archive & Delete Broadcasts (Older than 30 days)
+    // 2. Archive & Delete Broadcasts (Older than 30 days)
     await archiveAndDelete('Broadcast', cutoffDate);
+
+    // 3. Clean Expired Media Files (48h)
+    await cleanExpiredMedia(MEDIA_EXPIRE_HOURS);
 
     console.log(`[${new Date().toISOString()}] Data Retention Job Completed Successfully.`);
   } catch (error) {
@@ -32,8 +76,8 @@ const runRetentionPolicy = async () => {
 
 const archiveAndDelete = async (modelName, cutoffDate) => {
   const model = prisma[modelName.charAt(0).toLowerCase() + modelName.slice(1)];
-  
-  // Find records to archive
+  if (!model) return;
+
   const records = await model.findMany({
     where: {
       createdAt: { lt: cutoffDate }
@@ -41,13 +85,11 @@ const archiveAndDelete = async (modelName, cutoffDate) => {
   });
   
   if (records.length === 0) {
-    console.log(`No records to archive for ${modelName}.`);
     return;
   }
   
   console.log(`Archiving ${records.length} records for ${modelName}...`);
   
-  // Create archive entries
   const archiveData = records.map(record => ({
     originalId: record.id,
     model: modelName,
@@ -59,7 +101,6 @@ const archiveAndDelete = async (modelName, cutoffDate) => {
     data: archiveData
   });
   
-  // Delete original records
   const deleteResult = await model.deleteMany({
     where: {
       id: { in: records.map(r => r.id) }
@@ -69,4 +110,4 @@ const archiveAndDelete = async (modelName, cutoffDate) => {
   console.log(`Deleted ${deleteResult.count} ${modelName} records.`);
 };
 
-module.exports = { runRetentionPolicy };
+module.exports = { runRetentionPolicy, cleanExpiredMedia };

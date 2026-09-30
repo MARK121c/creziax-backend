@@ -1,15 +1,34 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { uploadImage, uploadAnyFile } = require('../controllers/uploadController');
 const { protect } = require('../middleware/auth');
 
-// Multer memory storage config
-const storage = multer.memoryStorage();
+// Multer memory storage config for avatar/logo image processing with sharp
+const memoryStorage = multer.memoryStorage();
+
+// Ensure storage/files directory exists for direct disk streaming of attachments
+const filesStoragePath = path.join(__dirname, '..', 'storage', 'files');
+if (!fs.existsSync(filesStoragePath)) {
+  fs.mkdirSync(filesStoragePath, { recursive: true });
+}
+
+const diskStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, filesStoragePath);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '';
+    const safeName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, safeName);
+  }
+});
 
 // Config for avatars/logos (restricted to 5MB images)
 const uploadImageConfig = multer({
-  storage,
+  storage: memoryStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -20,10 +39,10 @@ const uploadImageConfig = multer({
   }
 });
 
-// Config for chat attachments (up to 100MB, any file type)
+// Config for chat attachments & media (up to 1GB = 1024 * 1024 * 1024 bytes)
 const uploadFileConfig = multer({
-  storage,
-  limits: { fileSize: 100 * 1024 * 1024 } // 100MB max
+  storage: diskStorage,
+  limits: { fileSize: 1024 * 1024 * 1024 } // 1GB max
 });
 
 router.use(protect);

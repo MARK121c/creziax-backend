@@ -58,6 +58,12 @@ model User {
   activityLogs     ActivityLog[]
   expenses         Expense[] @relation("UserExpenses")
   
+  isOnline  Boolean  @default(false)
+  lastActiveAt DateTime?
+  
+  createdLeads     Lead[]    @relation("LeadCreator")
+  assignedLeads    Lead[]    @relation("LeadAssignee")
+  
   teamGroups       TeamGroup[] @relation("TeamGroupMembers")
   managedContracts Contract[] @relation("ContractMember")
 }
@@ -521,3 +527,46 @@ model Contract {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 }
+
+model Lead {
+  id               String    @id @default(uuid())
+  name             String
+  niche            String?   // النيش / المجال
+  nationality      String?   // جنسية العميل
+  hasOtherBusiness String?   // هل لديه بزنس آخر
+  followersCount   String?   // عدد المتابعين
+  videosCount      String?   // عدد الفيديوهات
+  startDate        DateTime? // تاريخ البداية
+  avgViews         String?   // متوسط المشاهدات
+  proposedPrice    Float?    // السعر / المبلغ المقترح
+  
+  // Meeting details
+  meetingDate      DateTime? // تاريخ الميتنج المحجوز
+  meetingTime      String?   // وقت الميتنج
+  meetingLink      String?
+  
+  phone            String?   // رقم الهاتف / الواتساب
+  email            String?
+  channelUrl       String?   // رابط القناة / السوشيال ميديا
+  notes            String?
+  
+  status           String    @default("NEW") // "NEW", "MEETING_SCHEDULED", "QUALIFIED", "WON", "LOST"
+  
+  createdById      String?
+  createdBy        User?     @relation("LeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  
+  assignedToId     String?
+  assignedTo       User?     @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique // e.g. "NOTIFICATION_CONFIG"
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
