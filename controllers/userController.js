@@ -585,6 +585,8 @@ const getClientContacts = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
 // @desc    Get admin/owner contacts for team members
 // @route   GET /api/users/team-contacts
 // @access  Private (Team)

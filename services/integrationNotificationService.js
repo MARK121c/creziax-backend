@@ -1,4 +1,3 @@
-const axios = require('axios');
 const prisma = require('../prismaClient');
 
 const SETTING_KEY = 'NOTIFICATION_CONFIG';
@@ -99,13 +98,18 @@ const sendTelegramNotification = async (botToken, chatId, text) => {
   }
 
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-  const response = await axios.post(url, {
-    chat_id: chatId,
-    text: text,
-    parse_mode: 'Markdown'
-  }, { timeout: 10000 });
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: text,
+      parse_mode: 'Markdown'
+    })
+  });
 
-  return response.data;
+  const data = await response.json();
+  return data;
 };
 
 /**
@@ -133,8 +137,14 @@ const sendWhatsAppNotification = async (whatsappConfig, text) => {
       headers['X-API-KEY'] = apiKey;
     }
 
-    const response = await axios.post(apiUrl, payload, { headers, timeout: 10000 });
-    return response.data;
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json().catch(() => ({ status: response.status }));
+    return data;
   }
 };
 
