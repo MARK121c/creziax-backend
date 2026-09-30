@@ -1,8 +1,6 @@
 // Creziax Portal Backend - v9.0-ABSOLUTE-PRIVACY (GROUP/DM Strict Routing)
 // Environment variables MUST be loaded before any other imports that depend on them
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
-}
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
