@@ -19,7 +19,13 @@ const getClients = async (req, res, next) => {
     
     const clientsWithTotal = clients.map(client => {
       const totalPaid = client.invoices.reduce((sum, inv) => sum + inv.amount, 0);
-      return { ...client, totalPaid };
+      const clientData = { ...client, totalPaid };
+      // Strip sensitive admin-only fields for CLIENT role
+      if (req.user.role === 'CLIENT') {
+        delete clientData.monthlyDueDate;
+        delete clientData.monthlyAmount;
+      }
+      return clientData;
     });
 
     res.json(clientsWithTotal);
@@ -67,7 +73,13 @@ const getClient = async (req, res, next) => {
     }
 
     const totalPaid = client.invoices.reduce((sum, inv) => sum + inv.amount, 0);
-    res.json({ ...client, totalPaid });
+    const clientData = { ...client, totalPaid };
+    // Strip sensitive admin-only fields for CLIENT role
+    if (req.user.role === 'CLIENT') {
+      delete clientData.monthlyDueDate;
+      delete clientData.monthlyAmount;
+    }
+    res.json(clientData);
   } catch (err) {
     next(err);
   }
@@ -75,7 +87,7 @@ const getClient = async (req, res, next) => {
 
 // Create a new client (requires a linked user)
 const createClient = async (req, res, next) => {
-  const { userId, company, phone, tier, logoUrl, notionLink, telegram, managedChannels, contractStartDate, contractEndDate, healthScore, internalNotes, preferredCurrency } = req.body;
+  const { userId, company, phone, tier, logoUrl, notionLink, telegram, managedChannels, contractStartDate, contractEndDate, healthScore, internalNotes, preferredCurrency, monthlyDueDate, monthlyAmount, channelLink, productionStages } = req.body;
   try {
     const client = await prisma.client.create({ 
       data: { 
@@ -91,7 +103,11 @@ const createClient = async (req, res, next) => {
         contractEndDate: contractEndDate ? new Date(contractEndDate) : null,
         healthScore: healthScore || 'GOOD',
         internalNotes,
-        preferredCurrency: preferredCurrency || 'USD'
+        preferredCurrency: preferredCurrency || 'USD',
+        monthlyDueDate: monthlyDueDate ? parseInt(monthlyDueDate) : null,
+        monthlyAmount: monthlyAmount ? parseFloat(monthlyAmount) : null,
+        channelLink,
+        productionStages: productionStages || []
       } 
     });
     res.status(201).json(client);
@@ -103,7 +119,7 @@ const createClient = async (req, res, next) => {
 // Update client
 const updateClient = async (req, res, next) => {
   const { id } = req.params;
-  const { company, phone, tier, isVip, logoUrl, notionLink, telegram, managedChannels, contractStartDate, contractEndDate, healthScore, internalNotes, preferredCurrency } = req.body;
+  const { company, phone, tier, isVip, logoUrl, notionLink, telegram, managedChannels, contractStartDate, contractEndDate, healthScore, internalNotes, preferredCurrency, monthlyDueDate, monthlyAmount, channelLink, productionStages } = req.body;
   try {
     const data = { 
       company, 
@@ -117,10 +133,18 @@ const updateClient = async (req, res, next) => {
       contractEndDate: contractEndDate ? new Date(contractEndDate) : undefined,
       healthScore,
       internalNotes,
-      preferredCurrency
+      preferredCurrency,
+      channelLink,
+      productionStages: productionStages !== undefined ? productionStages : undefined
     };
     if (managedChannels !== undefined) {
       data.managedChannels = parseInt(managedChannels);
+    }
+    if (monthlyDueDate !== undefined) {
+      data.monthlyDueDate = monthlyDueDate !== null ? parseInt(monthlyDueDate) : null;
+    }
+    if (monthlyAmount !== undefined) {
+      data.monthlyAmount = monthlyAmount !== null ? parseFloat(monthlyAmount) : null;
     }
     // Optional: Update linked user data
     const { firstName, lastName, email, password, isActive } = req.body;

@@ -88,6 +88,11 @@ model Client {
   internalNotes    String?
   preferredCurrency String      @default("USD")
   
+  monthlyDueDate   Int?        // Day of month (1-31) for monthly payment due date
+  monthlyAmount    Float?      // Monthly amount required from client
+  channelLink      String?     // YouTube/Social channel link
+  productionStages String[]    @default([]) // Custom production stages for this client
+  
   projects  Project[]
   invoices  Invoice[]
   tickets   Ticket[]
@@ -154,6 +159,7 @@ model Project {
   
   teamMembers       TeamMember[] @relation("ProjectTeam")
   phases            Phase[]
+  publishSchedules  PublishSchedule[]
   
   tasks       Task[]
   files       File[]
@@ -218,6 +224,20 @@ model Phase {
   
   startDate   DateTime?
   endDate     DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PublishSchedule {
+  id          String   @id @default(uuid())
+  title       String
+  publishTime DateTime
+  frequency   String?  // "weekly", "biweekly", "monthly"
+  notes       String?
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

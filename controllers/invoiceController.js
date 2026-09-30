@@ -21,12 +21,14 @@ const getInvoices = async (req, res, next) => {
       return res.json([]); // Team members see nothing from this endpoint
     }
 
-    // Filter Active Invoices: PENDING, or PAID within the last 30 days
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    where.OR = [
-      { status: 'PENDING' },
-      { status: 'PAID', updatedAt: { gte: thirtyDaysAgo } }
-    ];
+    // For admin: show ALL invoices. For CLIENT: show PENDING + PAID within 30 days
+    if (req.user.role === 'CLIENT') {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      where.OR = [
+        { status: 'PENDING' },
+        { status: 'PAID', updatedAt: { gte: thirtyDaysAgo } }
+      ];
+    }
 
     const invoices = await prisma.invoice.findMany({
       where,

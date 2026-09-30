@@ -166,6 +166,7 @@ const activityRoutes = require('./routes/activityRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const contractRoutes = require('./routes/contractRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const publishScheduleRoutes = require('./routes/publishScheduleRoutes');
 const { runRetentionPolicy } = require('./services/retentionService');
 
 app.get('/api/test-contracts', async (req, res) => {
@@ -197,6 +198,7 @@ app.use('/api/activities', activityRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/publish-schedules', publishScheduleRoutes);
 
 // Data Retention Cron Job (Run daily at midnight)
 cron.schedule('0 0 * * *', () => {
