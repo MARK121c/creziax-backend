@@ -1,30 +1,25 @@
 const prisma = require('../prismaClient');
 const bcrypt = require('bcryptjs');
 
-// Calculate comprehensive team performance & commitment metrics
-const calculateTeamPerformance = (tasks = []) => {
+// Calculate comprehensive team performance & commitment metrics (Tasks + Presence + Chat engagement)
+const calculateTeamPerformance = ({
+  tasks = [],
+  lastActiveAt = null,
+  isOnline = false,
+  messagesCount = 0,
+  leadsCount = 0,
+  activityCount = 0,
+  position = ''
+} = {}) => {
+  const now = new Date();
+  
+  // Pillar 1: Task Execution & Deliveries (Weight: 45%)
+  let taskScore = 100;
   const totalTasks = tasks.length;
-  if (totalTasks === 0) {
-    return {
-      totalTasks: 0,
-      completedTasks: 0,
-      inProgressTasks: 0,
-      onTimeTasks: 0,
-      overdueTasks: 0,
-      completionRate: 100,
-      onTimeRate: 100,
-      commitmentScore: 100,
-      rating: 'ممتاز',
-      lifetimeVideos: 0,
-      averageDeliveryHours: '0.0'
-    };
-  }
-
   const completedTasksList = tasks.filter(t => t.status === 'DELIVERED');
   const completedTasks = completedTasksList.length;
   const inProgressTasks = totalTasks - completedTasks;
 
-  const now = new Date();
   let onTimeTasks = 0;
   completedTasksList.forEach(t => {
     if (!t.deadline || new Date(t.updatedAt) <= new Date(t.deadline)) {
@@ -39,12 +34,59 @@ const calculateTeamPerformance = (tasks = []) => {
     }
   });
 
-  const completionRate = Math.round((completedTasks / totalTasks) * 100);
+  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
   const onTimeRate = completedTasks > 0 ? Math.round((onTimeTasks / completedTasks) * 100) : 100;
 
-  // Commitment Score Formula (مؤشر التزام أفراد الفريق):
-  // 60% completion rate + 40% on-time delivery rate - 5% per overdue active task
-  let rawScore = (completionRate * 0.6) + (onTimeRate * 0.4) - (overdueTasks * 5);
+  if (totalTasks > 0) {
+    taskScore = Math.max(0, (completionRate * 0.6) + (onTimeRate * 0.4) - (overdueTasks * 8));
+  } else {
+    // If member has no assigned tasks yet (e.g. Sales, Manager, or newly joined), baseline is 95%
+    taskScore = 95;
+  }
+
+  // Pillar 2: Platform Activity & Live Presence (Weight: 30%)
+  let presenceScore = 70;
+  if (isOnline) {
+    presenceScore = 100; // Currently connected online
+  } else if (lastActiveAt) {
+    const hoursSinceActive = (now - new Date(lastActiveAt)) / (1000 * 60 * 60);
+    if (hoursSinceActive <= 6) {
+      presenceScore = 95; // Active within last 6 hours
+    } else if (hoursSinceActive <= 24) {
+      presenceScore = 85; // Active within last 24 hours
+    } else if (hoursSinceActive <= 48) {
+      presenceScore = 75; // Active within 2 days
+    } else if (hoursSinceActive <= 120) {
+      presenceScore = 60; // Active within 5 days
+    } else {
+      presenceScore = Math.max(30, 60 - Math.round((hoursSinceActive - 120) / 24) * 5);
+    }
+  } else {
+    presenceScore = 60;
+  }
+
+  if (activityCount >= 10) presenceScore = Math.min(100, presenceScore + 10);
+  else if (activityCount >= 5) presenceScore = Math.min(100, presenceScore + 5);
+
+  // Pillar 3: Chat Engagement & Follow-up Responsiveness (Weight: 25%)
+  let communicationScore = 70;
+  const isSales = (position || '').toLowerCase().includes('sales') || (position || '').includes('مبيعات') || (position || '').includes('تسويق');
+  const totalInteractions = messagesCount + (isSales ? leadsCount * 5 : 0);
+
+  if (totalInteractions >= 30) {
+    communicationScore = 100;
+  } else if (totalInteractions >= 15) {
+    communicationScore = 90;
+  } else if (totalInteractions >= 5) {
+    communicationScore = 80;
+  } else if (totalInteractions >= 1) {
+    communicationScore = 75;
+  } else {
+    communicationScore = 65;
+  }
+
+  // Composite Weighted Score
+  const rawScore = (taskScore * 0.45) + (presenceScore * 0.30) + (communicationScore * 0.25);
   const commitmentScore = Math.min(100, Math.max(0, Math.round(rawScore)));
 
   let rating = 'ممتاز';
@@ -56,7 +98,6 @@ const calculateTeamPerformance = (tasks = []) => {
     rating = 'جيد جداً';
   }
 
-  // Delivery time
   let avgDeliveryHours = '0.0';
   if (completedTasks > 0) {
     const totalMs = completedTasksList.reduce((sum, t) => sum + (new Date(t.updatedAt) - new Date(t.createdAt)), 0);
@@ -74,7 +115,14 @@ const calculateTeamPerformance = (tasks = []) => {
     commitmentScore,
     rating,
     lifetimeVideos: completedTasks,
-    averageDeliveryHours: avgDeliveryHours
+    averageDeliveryHours: avgDeliveryHours,
+    breakdown: {
+      taskScore: Math.round(taskScore),
+      presenceScore: Math.round(presenceScore),
+      communicationScore: Math.round(communicationScore),
+      messagesCount,
+      leadsCount
+    }
   };
 };
 
@@ -100,6 +148,13 @@ const getUsers = async (req, res, next) => {
         },
         expenses: true,
         bonuses: true,
+        _count: {
+          select: {
+            messagesSent: true,
+            createdLeads: true,
+            activityLogs: true
+          }
+        }
       }
     });
     
@@ -130,7 +185,15 @@ const getUsers = async (req, res, next) => {
         const monthlySalary = tm.monthlySalary || 0;
         const totalBonuses = u.bonuses?.reduce((sum, b) => sum + (b.amount || 0), 0) || 0;
         
-        const performance = calculateTeamPerformance(tm.tasks || []);
+        const performance = calculateTeamPerformance({
+          tasks: tm.tasks || [],
+          lastActiveAt: u.lastActiveAt,
+          isOnline: u.isOnline,
+          messagesCount: u._count?.messagesSent || 0,
+          leadsCount: u._count?.createdLeads || 0,
+          activityCount: u._count?.activityLogs || 0,
+          position: tm.position
+        });
 
         return {
           ...u,
@@ -183,6 +246,13 @@ const getUser = async (req, res, next) => {
         },
         expenses: true,
         bonuses: true,
+        _count: {
+          select: {
+            messagesSent: true,
+            createdLeads: true,
+            activityLogs: true
+          }
+        }
       }
     });
 
@@ -198,7 +268,15 @@ const getUser = async (req, res, next) => {
       const monthlySalary = tm.monthlySalary || 0;
       const totalBonuses = user.bonuses?.reduce((sum, b) => sum + (b.amount || 0), 0) || 0;
       
-      const performance = calculateTeamPerformance(tm.tasks || []);
+      const performance = calculateTeamPerformance({
+        tasks: tm.tasks || [],
+        lastActiveAt: user.lastActiveAt,
+        isOnline: user.isOnline,
+        messagesCount: user._count?.messagesSent || 0,
+        leadsCount: user._count?.createdLeads || 0,
+        activityCount: user._count?.activityLogs || 0,
+        position: tm.position
+      });
 
       user.position = tm.position;
       user.company = tm.company;
@@ -644,6 +722,13 @@ const getUserPerformance = async (req, res, next) => {
               }
             }
           }
+        },
+        _count: {
+          select: {
+            messagesSent: true,
+            createdLeads: true,
+            activityLogs: true
+          }
         }
       }
     });
@@ -651,7 +736,15 @@ const getUserPerformance = async (req, res, next) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const tasks = user.teamMemberInfo?.tasks || [];
-    const performance = calculateTeamPerformance(tasks);
+    const performance = calculateTeamPerformance({
+      tasks,
+      lastActiveAt: user.lastActiveAt,
+      isOnline: user.isOnline,
+      messagesCount: user._count?.messagesSent || 0,
+      leadsCount: user._count?.createdLeads || 0,
+      activityCount: user._count?.activityLogs || 0,
+      position: user.teamMemberInfo?.position
+    });
 
     res.json({
       userId: user.id,
