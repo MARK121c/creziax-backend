@@ -96,6 +96,18 @@ const getLead = async (req, res, next) => {
   }
 };
 
+const parseDate = (val) => {
+  if (!val || val === '' || val === 'null' || val === 'undefined') return null;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+const parseNum = (val) => {
+  if (val === '' || val === null || val === undefined) return null;
+  const n = parseFloat(val);
+  return isNaN(n) ? null : n;
+};
+
 /**
  * @desc Create a new CRM lead and dispatch Telegram / WhatsApp notifications
  * @route POST /api/leads
@@ -123,31 +135,31 @@ const createLead = async (req, res, next) => {
       assignedToId
     } = req.body;
 
-    if (!name) {
+    if (!name || !name.trim()) {
       return res.status(400).json({ message: 'اسم العميل مطلوب (Lead name is required)' });
     }
 
     const lead = await prisma.lead.create({
       data: {
-        name,
-        niche: niche || null,
-        nationality: nationality || null,
+        name: name.trim(),
+        niche: niche?.trim() || null,
+        nationality: nationality?.trim() || null,
         hasOtherBusiness: hasOtherBusiness || null,
-        followersCount: followersCount ? String(followersCount) : null,
-        videosCount: videosCount ? String(videosCount) : null,
-        startDate: startDate ? new Date(startDate) : null,
-        avgViews: avgViews ? String(avgViews) : null,
-        proposedPrice: proposedPrice ? parseFloat(proposedPrice) : null,
-        meetingDate: meetingDate ? new Date(meetingDate) : null,
-        meetingTime: meetingTime || null,
-        meetingLink: meetingLink || null,
-        phone: phone || null,
-        email: email || null,
-        channelUrl: channelUrl || null,
-        notes: notes || null,
+        followersCount: followersCount ? String(followersCount).trim() : null,
+        videosCount: videosCount ? String(videosCount).trim() : null,
+        startDate: parseDate(startDate),
+        avgViews: avgViews ? String(avgViews).trim() : null,
+        proposedPrice: parseNum(proposedPrice),
+        meetingDate: parseDate(meetingDate),
+        meetingTime: meetingTime?.trim() || null,
+        meetingLink: meetingLink?.trim() || null,
+        phone: phone?.trim() || null,
+        email: email?.trim() || null,
+        channelUrl: channelUrl?.trim() || null,
+        notes: notes?.trim() || null,
         status: status || 'NEW',
         createdById: req.user.id,
-        assignedToId: assignedToId || req.user.id
+        assignedToId: (assignedToId && assignedToId.trim() !== '') ? assignedToId : req.user.id
       },
       include: {
         createdBy: {
@@ -199,24 +211,24 @@ const updateLead = async (req, res, next) => {
     } = req.body;
 
     const data = {};
-    if (name !== undefined) data.name = name;
-    if (niche !== undefined) data.niche = niche;
-    if (nationality !== undefined) data.nationality = nationality;
-    if (hasOtherBusiness !== undefined) data.hasOtherBusiness = hasOtherBusiness;
-    if (followersCount !== undefined) data.followersCount = String(followersCount);
-    if (videosCount !== undefined) data.videosCount = String(videosCount);
-    if (startDate !== undefined) data.startDate = startDate ? new Date(startDate) : null;
-    if (avgViews !== undefined) data.avgViews = String(avgViews);
-    if (proposedPrice !== undefined) data.proposedPrice = proposedPrice ? parseFloat(proposedPrice) : null;
-    if (meetingDate !== undefined) data.meetingDate = meetingDate ? new Date(meetingDate) : null;
-    if (meetingTime !== undefined) data.meetingTime = meetingTime;
-    if (meetingLink !== undefined) data.meetingLink = meetingLink;
-    if (phone !== undefined) data.phone = phone;
-    if (email !== undefined) data.email = email;
-    if (channelUrl !== undefined) data.channelUrl = channelUrl;
-    if (notes !== undefined) data.notes = notes;
+    if (name !== undefined) data.name = name.trim();
+    if (niche !== undefined) data.niche = niche?.trim() || null;
+    if (nationality !== undefined) data.nationality = nationality?.trim() || null;
+    if (hasOtherBusiness !== undefined) data.hasOtherBusiness = hasOtherBusiness || null;
+    if (followersCount !== undefined) data.followersCount = followersCount ? String(followersCount).trim() : null;
+    if (videosCount !== undefined) data.videosCount = videosCount ? String(videosCount).trim() : null;
+    if (startDate !== undefined) data.startDate = parseDate(startDate);
+    if (avgViews !== undefined) data.avgViews = avgViews ? String(avgViews).trim() : null;
+    if (proposedPrice !== undefined) data.proposedPrice = parseNum(proposedPrice);
+    if (meetingDate !== undefined) data.meetingDate = parseDate(meetingDate);
+    if (meetingTime !== undefined) data.meetingTime = meetingTime?.trim() || null;
+    if (meetingLink !== undefined) data.meetingLink = meetingLink?.trim() || null;
+    if (phone !== undefined) data.phone = phone?.trim() || null;
+    if (email !== undefined) data.email = email?.trim() || null;
+    if (channelUrl !== undefined) data.channelUrl = channelUrl?.trim() || null;
+    if (notes !== undefined) data.notes = notes?.trim() || null;
     if (status !== undefined) data.status = status;
-    if (assignedToId !== undefined) data.assignedToId = assignedToId;
+    if (assignedToId !== undefined) data.assignedToId = (assignedToId && assignedToId.trim() !== '') ? assignedToId : null;
 
     const updated = await prisma.lead.update({
       where: { id },
