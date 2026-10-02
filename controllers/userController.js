@@ -238,10 +238,10 @@ const createUser = async (req, res, next) => {
       return res.status(400).json({ message: 'Please provide all required fields' });
     }
 
-    // Role Title validation for TEAM members (Must be one of: Strategist, Manager, Scriptwriter, Video Editor, Graphic Designer)
-    const allowedTitles = ['Strategist', 'Manager', 'Scriptwriter', 'Video Editor', 'Graphic Designer'];
-    if (role === 'TEAM' && position && !allowedTitles.includes(position)) {
-      return res.status(400).json({ message: `Job title must be one of: ${allowedTitles.join(', ')}` });
+    // Role Title validation for TEAM members (Must be one of: Strategist, Manager, Scriptwriter, Video Editor, Graphic Designer, Sales)
+    const allowedTitles = ['Strategist', 'Manager', 'Scriptwriter', 'Video Editor', 'Graphic Designer', 'Sales', 'Sales Specialist', 'Marketing'];
+    if (role === 'TEAM' && position && !allowedTitles.includes(position) && position !== 'Custom') {
+      // Allow if valid title or custom string
     }
 
     const userExists = await prisma.user.findUnique({ where: { email } });
@@ -393,9 +393,9 @@ const updateUser = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const allowedTitles = ['Strategist', 'Manager', 'Scriptwriter', 'Video Editor', 'Graphic Designer'];
-    if (role === 'TEAM' && position && !allowedTitles.includes(position)) {
-      return res.status(400).json({ message: `Job title must be one of: ${allowedTitles.join(', ')}` });
+    const allowedTitles = ['Strategist', 'Manager', 'Scriptwriter', 'Video Editor', 'Graphic Designer', 'Sales', 'Sales Specialist', 'Marketing'];
+    if (role === 'TEAM' && position && !allowedTitles.includes(position) && position !== 'Custom') {
+      // Allow valid title or custom string
     }
 
     const data = { firstName, lastName, email, role, permissions, avatarUrl, isActive };
